@@ -1,0 +1,37 @@
+{
+	"description": "CLI to copy media files from sony camera devise to computer",
+	"option": {
+		"setup": "setup output directory, files search patters",
+		"manual": "user input mode",
+		"output": "set output folder path",
+		"patterns": "file pattern for search in USB drives",
+		"ignore": "ignore file patterns",
+		"date_format": "date format for naming folders",
+		"threads_count": "threads count",
+		"batch_size": "bytes count",
+		"per_day": "create folder for each day",
+		"subfolders": "create subfolders for each day"
+	},
+	"input": {
+		"output": "Enter output folder path",
+		"patterns": "Add file pattern for search",
+		"ignore": "Add ignore file pattern",
+		"date_format": "Enter date format for naming folders",
+		"validate": {
+			"at_least_one": "You must introduce at least one meaning",
+			"duplicated": "patterns must NOT have duplicate items"
+		},
+		"complete": "enter empty to complete"
+	},
+	"storage": {
+		"output": "Output folder",
+		"patterns": "File patterns for search",
+		"ignore": "Ignore patterns",
+		"date_format": "Date format",
+		"threads_count": "storage.threads_count",
+		"batch_size": "storage.batch_size",
+		"per_day": "storage.per_day",
+		"subfolders": "storage.subfolders"
+	},
+	"config": "Config"
+}
