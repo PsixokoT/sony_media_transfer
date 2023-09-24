@@ -8,6 +8,6 @@ i18n.configure({
     objectNotation: true,
 });
 
-export function t(key: string): string {
-    return i18n.__(key);
+export function t(key: string, ...args:string[]): string {
+    return i18n.__(key, ...args);
 }

@@ -2,11 +2,11 @@
 	"description": "CLI to copy media files from sony camera devise to computer",
 	"option": {
 		"setup": "setup output directory, files search patters",
-		"manual": "user input mode",
+		"manual": "input folder name mode",
 		"output": "set output folder path",
-		"patterns": "file pattern for search in USB drives",
+		"files": "file pattern for search in USB drives",
 		"ignore": "ignore file patterns",
-		"date_format": "date format for naming folders",
+		"format": "date format for naming folders",
 		"threads_count": "threads count",
 		"batch_size": "bytes count",
 		"per_day": "create folder for each day",
@@ -14,24 +14,29 @@
 	},
 	"input": {
 		"output": "Enter output folder path",
-		"patterns": "Add file pattern for search",
+		"files": "Add file pattern for search",
 		"ignore": "Add ignore file pattern",
-		"date_format": "Enter date format for naming folders",
+		"format": "Enter date format for naming folders",
 		"validate": {
 			"at_least_one": "You must introduce at least one meaning",
 			"duplicated": "patterns must NOT have duplicate items"
 		},
-		"complete": "enter empty to complete"
+		"complete": "enter empty to complete",
+        "folder": "Enter folder name for %s"
 	},
 	"storage": {
 		"output": "Output folder",
-		"patterns": "File patterns for search",
+		"files": "File patterns for search",
 		"ignore": "Ignore patterns",
-		"date_format": "Date format",
-		"threads_count": "storage.threads_count",
-		"batch_size": "storage.batch_size",
-		"per_day": "storage.per_day",
-		"subfolders": "storage.subfolders"
+		"format": "Date format",
+		"threads_count": "Threads count",
+		"batch_size": "Batch size",
+		"per_day": "Per_day",
+		"subfolders": "Subfolders"
 	},
-	"config": "Config"
+	"config": "Config",
+	"found_in": "Found in %s",
+    "total": "Total: %i files, %s",
+    "day": "Day",
+    "count": "Count"
 }

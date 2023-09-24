@@ -10,13 +10,11 @@ const Ajv = AjvModule.default;
 const ajv = new Ajv();
 
 const defaults = {
-    patterns: ['DCIM/**/*.{ARW,HIF,JPG}', 'PRIVATE/M4ROOT/**/*.{MP4,XML}'],
+    files: ['DCIM/**/*.{ARW,HIF,JPG}', 'PRIVATE/M4ROOT/**/*.{MP4,XML}'],
     ignore: ['**/MEDIAPRO.XML'],
-    date_format: '%Y.%m.%d',
+    format: '%Y.%m.%d',
     threads_count: 6,
-    batch_size: 0,
-    per_day: true,
-    subfolders: false,
+    batch_size: 0
 };
 
 export type ConfigSheme = typeof defaults & { output?: string };
@@ -27,7 +25,7 @@ const schema = {
         type: 'string',
         minLength: 1,
     },
-    patterns: {
+    files: {
         type: 'array',
         uniqueItems: true,
         minItems: 1,
@@ -45,7 +43,7 @@ const schema = {
             minLength: 1,
         },
     },
-    date_format: {
+    format: {
         type: 'string',
     },
     threads_count: {
@@ -54,13 +52,7 @@ const schema = {
     },
     batch_size: {
         type: 'integer',
-    },
-    per_day: {
-        type: 'boolean',
-    },
-    subfolders: {
-        type: 'boolean',
-    },
+    }
 };
 
 class Storage {
@@ -72,6 +64,22 @@ class Storage {
             schema,
             defaults,
         });
+    }
+
+    get output():string {
+        return this.#config.get('output') || '/';
+    }
+
+    get files() {
+        return this.#config.get('files');
+    }
+
+    get ignore() {
+        return this.#config.get('ignore');
+    }
+
+    get format() {
+        return this.#config.get('format');
     }
 
     async init(options: Options) {
@@ -115,9 +123,9 @@ class Storage {
 
     private async setup() {
         this.setValue('output', await this.inputString('output'));
-        this.setValue('patterns', await this.inputFilePatterns('patterns'));
+        this.setValue('files', await this.inputFilePatterns('files'));
         this.setValue('ignore', await this.inputFilePatterns('ignore'));
-        this.setValue('date_format', await this.inputString('date_format'));
+        this.setValue('format', await this.inputString('format'));
         this.log();
     }
 
@@ -130,7 +138,7 @@ class Storage {
         });
     }
 
-    private async inputFilePatterns(property: 'patterns' | 'ignore') {
+    private async inputFilePatterns(property: 'files' | 'ignore') {
         const defaultValues = this.#config.get(property);
         const result: string[] = [];
         let pattern: string;
@@ -183,13 +191,11 @@ class Storage {
         const array = (value: string[]) => `[${value.map(item => chalk.green(item)).join(', ')}]`;
         return [
             [chalk.bold(t('storage.output')), chalk.green(this.#config.get('output'))].join(': '),
-            [chalk.bold(t('storage.patterns')), array(this.#config.get('patterns'))].join(': '),
+            [chalk.bold(t('storage.files')), array(this.#config.get('files'))].join(': '),
             [chalk.bold(t('storage.ignore')), array(this.#config.get('ignore'))].join(': '),
-            [chalk.bold(t('storage.date_format')), chalk.green(this.#config.get('date_format'))].join(': '),
+            [chalk.bold(t('storage.format')), chalk.green(this.#config.get('format'))].join(': '),
             [chalk.bold(t('storage.threads_count')), chalk.green(this.#config.get('threads_count'))].join(': '),
-            [chalk.bold(t('storage.batch_size')), chalk.green(this.#config.get('batch_size'))].join(': '),
-            [chalk.bold(t('storage.per_day')), chalk.green(this.#config.get('per_day'))].join(': '),
-            [chalk.bold(t('storage.subfolders')), chalk.green(this.#config.get('subfolders'))].join(': '),
+            [chalk.bold(t('storage.batch_size')), chalk.green(this.#config.get('batch_size'))].join(': ')
         ].join('\n');
     }
 
