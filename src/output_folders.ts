@@ -1,18 +1,16 @@
 import { input } from '@inquirer/prompts';
-import { existsSync } from 'fs';
-import { mkdir } from 'fs/promises';
 import { join } from 'path';
-import { setTimeout } from 'timers/promises';
 import { FileStat, StatObject } from './files_stat.js';
 import { store } from './storage.js';
 import { t } from './translate.js';
 
-export async function copyFiles(
+export type FolderInfo = { day: string, files: string[], dist: string };
+export async function prepareFiles(
     data: StatObject,
     manual?: boolean,
     perDay?: boolean,
     subfolders?: boolean
-) {
+): Promise<FolderInfo[]> {
     const days = Object.keys(data.byDay).sort();
     let dist = store.output;
     if (days.length > 1 && !perDay) {
@@ -32,7 +30,9 @@ export async function copyFiles(
         }
     }
 
-    return data.stats.map((file) => copy(file, folders[file.day]));
+    return days.map(day => {
+        return { day, files: data.byDay[day].map(file => file.path), dist: folders[day] };
+    })
 }
 
 async function getOutputPath(dist: string, name: string, manual?: boolean) {
@@ -44,20 +44,6 @@ async function getOutputPath(dist: string, name: string, manual?: boolean) {
             name = [name, userInput].join(' - ');
         }
     }
-    const path = join(dist, name);
-    if (!existsSync(path)) {
-        return mkdir(path, { recursive: true }).then(() => path);
-    }
-    return path;
-}
 
-function copy(file: FileStat, dist: string) {
-    return {
-        title: file.path + ' -> ' + dist,
-        task() {
-            return setTimeout(30, () => {
-                return file.stat.size;
-            });
-        },
-    };
+    return join(dist, name);
 }

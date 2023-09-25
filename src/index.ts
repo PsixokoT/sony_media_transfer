@@ -1,11 +1,15 @@
 import boxen from 'boxen';
 import { Command } from 'commander';
-import Listr from 'listr';
-import { copyFiles } from './copy.js';
+import cliProgress from 'cli-progress';
+import { FolderInfo, prepareFiles } from './output_folders.js';
 import { getStat } from './files_stat.js';
 import { searchUSBDrives } from './search_usb.js';
 import { ConfigSheme, store } from './storage.js';
 import { t } from './translate.js';
+import chalk from 'chalk';
+import cpy from 'cpy';
+import { existsSync } from 'fs';
+import { join } from 'path';
 
 const program = new Command();
 program.name('media-transfer');
@@ -46,17 +50,44 @@ async function run(options: Options) {
                     borderStyle: 'double',
                 })
             );
-            const tasks = await copyFiles(
+
+            const folders = await prepareFiles(
                 stat,
                 options.manual,
                 options.per_day,
                 options.subfolders
             );
-            const list = new Listr(tasks);
-            await list.run();
+
+            await copy(folders);
         }
     } else {
         console.log('USB drives not found');
+    }
+}
+
+async function copy(folders: FolderInfo[]) {
+    for (const { files, day, dist } of folders) {
+        const progressBar = new cliProgress.SingleBar({
+            format: `${day} -> ${dist} |${chalk.cyan(
+                '{bar}'
+            )}| {percentage}% || {value}/{total} Chunks || Speed: {speed}`,
+            barCompleteChar: '\u2588',
+            barIncompleteChar: '\u2591',
+            hideCursor: true,
+        });
+        progressBar.start(files.length, 0, {
+            speed: 'N/A',
+        });
+        await cpy(files, dist, {
+            flat: true,
+            overwrite: false,
+            filter: async (file) => {
+                return !existsSync(join(dist, file.name));
+            },
+        }).on('progress', (progress) => {
+            progressBar.update(progress.completedFiles);
+        });
+        progressBar.stop();
     }
 }
 
