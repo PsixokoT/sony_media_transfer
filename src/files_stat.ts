@@ -9,6 +9,7 @@ export type FileStat = { path: string; stat: Stats; day: string };
 export type StatObject = {
     stats: FileStat[];
     byDay: Record<string, FileStat[]>;
+    totalSize: number;
     log: () => string;
 };
 
@@ -27,14 +28,16 @@ export async function getStat(files: string[]): Promise<StatObject> {
         return group;
     }, {});
 
-    return { stats, byDay, log };
+    const totalSize = getSize(stats);
+
+    return { stats, byDay, totalSize, log };
 }
 
 export function getFilesSize(list: FileStat[]) {
     return niceBytes(getSize(list));
 }
 
-function niceBytes(value: number) {
+export function niceBytes(value: number) {
     let b = 0;
     for (; 1024 <= value && ++b; ) value /= 1024;
     return (
@@ -44,7 +47,7 @@ function niceBytes(value: number) {
     );
 }
 
-function getSize(list: FileStat[]) {
+export function getSize(list: FileStat[]) {
     return list.reduce((result, item) => {
         return result + item.stat.size;
     }, 0);
@@ -62,7 +65,7 @@ function log(this: StatObject) {
     const total = t(
         'total',
         this.stats.length.toString(),
-        getFilesSize(this.stats)
+        niceBytes(this.totalSize)
     );
     return [table.toString(), total].join('\n');
 }

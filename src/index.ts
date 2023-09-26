@@ -2,12 +2,12 @@ import boxen from 'boxen';
 import { Command } from 'commander';
 import cliProgress from 'cli-progress';
 import { FolderInfo, prepareFiles } from './output_folders.js';
-import { getStat } from './files_stat.js';
+import { getStat, niceBytes } from './files_stat.js';
 import { searchUSBDrives } from './search_usb.js';
 import { ConfigSheme, store } from './storage.js';
 import { t } from './translate.js';
 import chalk from 'chalk';
-import cpy from 'cpy';
+import cpy, { ProgressData } from 'cpy';
 import { existsSync } from 'fs';
 import { join } from 'path';
 
@@ -66,16 +66,17 @@ async function run(options: Options) {
 }
 
 async function copy(folders: FolderInfo[]) {
-    for (const { files, day, dist } of folders) {
+    for (const folder of folders) {
+        const { files, day, dist, totalSize } = folder;
         const progressBar = new cliProgress.SingleBar({
             format: `${day} -> ${dist} |${chalk.cyan(
                 '{bar}'
-            )}| {percentage}% || {value}/{total} Chunks || Speed: {speed}`,
+            )}| {percentage}% || {current}/{totalFiles} Files || Speed: {speed}`,
             barCompleteChar: '\u2588',
             barIncompleteChar: '\u2591',
             hideCursor: true,
         });
-        progressBar.start(files.length, 0, {
+        progressBar.start(totalSize, 0, {
             speed: 'N/A',
         });
         await cpy(files, dist, {
@@ -84,11 +85,35 @@ async function copy(folders: FolderInfo[]) {
             filter: async (file) => {
                 return !existsSync(join(dist, file.name));
             },
-        }).on('progress', (progress) => {
-            progressBar.update(progress.completedFiles);
-        });
+        }).on('progress', progressHandler(progressBar, folder));
         progressBar.stop();
     }
+}
+
+function progressHandler(bar: cliProgress.SingleBar, folder: FolderInfo) {
+    const { totalSize, files } = folder;
+    let prev = {
+        percent: 0,
+        completedFiles: 0,
+        completedSize: 0,
+        totalFiles: files.length,
+    };
+    let time = performance.now();
+    return function (progress: ProgressData) {
+        if (progress.completedSize !== prev.completedSize) {
+            const now = performance.now();
+            const timeDiff = now - time;
+            const bytesDiff = progress.completedSize - prev.completedSize;
+            const speed = niceBytes((bytesDiff / timeDiff) * 1e3) + '/sec';
+            bar.update(progress.completedSize, {
+                speed,
+                current: progress.completedFiles,
+                totalFiles: files.length,
+            });
+            prev = progress;
+            time = now;
+        }
+    };
 }
 
 run(program.opts()).then(() => {

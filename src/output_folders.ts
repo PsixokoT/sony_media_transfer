@@ -1,10 +1,10 @@
 import { input } from '@inquirer/prompts';
 import { join } from 'path';
-import { FileStat, StatObject } from './files_stat.js';
+import { StatObject, getSize } from './files_stat.js';
 import { store } from './storage.js';
 import { t } from './translate.js';
 
-export type FolderInfo = { day: string, files: string[], dist: string };
+export type FolderInfo = { day: string; files: string[]; dist: string, totalSize: number };
 export async function prepareFiles(
     data: StatObject,
     manual?: boolean,
@@ -30,9 +30,12 @@ export async function prepareFiles(
         }
     }
 
-    return days.map(day => {
-        return { day, files: data.byDay[day].map(file => file.path), dist: folders[day] };
-    })
+    return days.map((day) => {
+        const totalSize = getSize(data.byDay[day]);
+        const files = data.byDay[day].map((file) => file.path);
+        dist = folders[day];
+        return { day, totalSize, files, dist };
+    });
 }
 
 async function getOutputPath(dist: string, name: string, manual?: boolean) {
