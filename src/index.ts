@@ -99,17 +99,15 @@ function progressHandler(bar: cliProgress.SingleBar, folder: FolderInfo) {
         totalFiles: files.length,
     };
     let time = performance.now();
+    const startTime = time;
     return function (progress: ProgressData) {
         if (progress.completedSize !== prev.completedSize) {
             const now = performance.now();
             const timeDiff = now - time;
             const bytesDiff = progress.completedSize - prev.completedSize;
-            const speed = niceBytes((bytesDiff / timeDiff) * 1e3) + '/sec';
-            bar.update(progress.completedSize, {
-                speed,
-                current: progress.completedFiles,
-                totalFiles: files.length,
-            });
+            const speed = niceBytes(bytesDiff / timeDiff * 1e3) + '/sec';
+            const avgSpeed = niceBytes(progress.completedSize / (now - startTime) * 1e3) + '/sec'
+            bar.update(progress.completedSize, { speed: avgSpeed, current: progress.completedFiles, totalFiles: files.length });
             prev = progress;
             time = now;
         }
