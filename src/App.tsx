@@ -5,7 +5,8 @@ import Preview from './Preview';
 import Settings from './Settings';
 import Viewer from './Viewer';
 import { setLang, t, type Lang } from './i18n';
-import { bytes, total, type FileEntry, type Item, type Library, type Scan } from './model';
+import { Icon } from './icons';
+import { bytes, openFolder, total, type FileEntry, type Item, type Library, type Scan } from './model';
 import './App.css';
 
 const dayTitle = (day: string) =>
@@ -189,21 +190,41 @@ export default function App() {
         <main>
             <header>
                 <button onClick={refresh} disabled={busy}>
+                    <Icon name="refresh" />
                     {busy ? t.searching : t.refresh}
                 </button>
                 <button onClick={eject} disabled={busy || !scan?.cards.length}>
+                    <Icon name="eject" />
                     {t.eject}
                 </button>
                 <button disabled={!lib || !chosenFiles.length} onClick={() => setDialog(true)}>
+                    <Icon name="copy" />
                     {t.copy} {chosenFiles.length ? `${chosenFiles.length} · ${bytes(total(chosenFiles))}` : ''}
                 </button>
                 <span className="muted">
-                    {!root && `${t.noRoot} `}
                     {scan && root && !lib && !error && `${t.checkingLibrary} `}
                     {scan?.cards.length ? `${t.cards}: ${scan.cards.join(', ')}` : ''}
                 </span>
                 <span className="spacer" />
-                <button onClick={() => setSettings(true)}>{t.settings}</button>
+                {root ? (
+                    <>
+                        <span className="muted root" title={root}>
+                            {root}
+                        </span>
+                        <button className="icon-button" title={t.openFolder} onClick={() => openFolder(root)}>
+                            <Icon name="openFolder" />
+                        </button>
+                    </>
+                ) : (
+                    <button onClick={() => setSettings(true)}>
+                        <Icon name="choose" />
+                        {t.chooseFolder}
+                    </button>
+                )}
+                <button onClick={() => setSettings(true)}>
+                    <Icon name="settings" />
+                    {t.settings}
+                </button>
             </header>
 
             {error && <p className="error">{error}</p>}
@@ -279,8 +300,8 @@ export default function App() {
                 />
             )}
 
-            {dialog && lib && (
-                <CopyDialog root={root} chosen={chosen} existing={lib.existing} onClose={closeDialog} />
+            {dialog && scan && lib && (
+                <CopyDialog root={root} days={scan.days} chosen={chosen} existing={lib.existing} onClose={closeDialog} />
             )}
 
             {settings && (

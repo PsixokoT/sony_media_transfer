@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Memory card with a cut corner and contacts, an arrow down onto the computer. Source for `npm run tauri icon`. -->
+  <path d="M288 48h384l224 224v640a64 64 0 0 1-64 64H288a64 64 0 0 1-64-64V112a64 64 0 0 1 64-64z" fill="#2f7be6"/>
+  <path d="M352 120v120M456 120v120M560 120v120" stroke="#fff" stroke-opacity=".55" stroke-width="56" stroke-linecap="round"/>
+  <path d="M512 352h96v272h136L560 856 376 624h136z" fill="#fff"/>
+</svg>

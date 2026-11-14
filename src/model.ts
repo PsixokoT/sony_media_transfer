@@ -1,4 +1,4 @@
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { t } from './i18n';
 
 // Shapes of what the Rust commands return.
@@ -23,5 +23,8 @@ export type Library = { copied: string[]; existing: Record<string, string> };
 export const thumbUrl = (t: Omit<Thumb, 'hevc'>) => convertFileSrc(`${t.offset}-${t.len}-${t.path}`, 'thumb');
 
 export const total =(files: FileEntry[]) => files.reduce((sum, f) => sum + f.size, 0);
+
+/** In Explorer. A folder that's gone is reported in a message box, as the viewer does with open_external. */
+export const openFolder = (path: string) => invoke('open_folder', { path }).catch(alert);
 
 export const bytes = (n: number) => (n > 1e9 ? `${(n / 1e9).toFixed(1)} ${t.gb}` : `${(n / 1e6).toFixed(0)} ${t.mb}`);

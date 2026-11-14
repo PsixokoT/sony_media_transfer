@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { t } from './i18n';
+import { Icon } from './icons';
 import { thumbUrl, type Item } from './model';
 import Preview from './Preview';
 
@@ -56,7 +57,10 @@ export default function Viewer(props: { item: Item; checked: boolean; onCheck: (
             {!image && !video && (
                 <div className="media empty">
                     {item.video ? (
-                        <button onClick={openExternal}>{t.cantPlay}</button>
+                        <button onClick={openExternal}>
+                            <Icon name="openExternal" />
+                            {t.cantPlay}
+                        </button>
                     ) : (
                         <span className="muted">{t.noPreview}</span>
                     )}
@@ -72,9 +76,12 @@ export default function Viewer(props: { item: Item; checked: boolean; onCheck: (
                     {video && isProxy(video.path) && ` · ${t.proxy}`}
                 </span>
                 <span className="spacer" />
-                <button onClick={openExternal}>{t.openExternal}</button>
-                <button onClick={props.onClose} title="Esc">
-                    ✕
+                <button onClick={openExternal}>
+                    <Icon name="openExternal" />
+                    {t.openExternal}
+                </button>
+                <button className="icon-button" onClick={props.onClose} title={`${t.close} (Esc)`}>
+                    <Icon name="close" />
                 </button>
             </div>
         </div>

@@ -20,7 +20,8 @@ pub struct Progress {
     pub files: usize,
 }
 
-pub fn copy(root: &Path, jobs: &[Job], mut report: impl FnMut(&Progress)) -> io::Result<()> {
+/// Returns the folders copied into, so the UI can show and open them.
+pub fn copy(root: &Path, jobs: &[Job], mut report: impl FnMut(&Progress)) -> io::Result<Vec<PathBuf>> {
     if !root.is_dir() {
         let msg = format!("{}: {}", crate::tr("Папка библиотеки не найдена", "Library folder not found"), root.display());
         return Err(io::Error::new(io::ErrorKind::NotFound, msg));
@@ -28,9 +29,13 @@ pub fn copy(root: &Path, jobs: &[Job], mut report: impl FnMut(&Progress)) -> io:
     // Big chunks: fewer round trips to the card and the HDD. Files go one by one, an HDD hates parallel writes.
     let mut buf = vec![0u8; 8 << 20];
     let mut done = Progress::default();
+    let mut folders = Vec::new();
     for job in jobs {
         let dir = root.join(folder_name(&job.folder)?);
         fs::create_dir_all(&dir)?;
+        if !folders.contains(&dir) {
+            folders.push(dir.clone()); // two days typed into one folder show it once
+        }
         for src in &job.files {
             let dst = dir.join(src.file_name().ok_or_else(|| io::Error::other(crate::tr("путь без имени файла", "path without a file name")))?);
             let size = fs::metadata(src)?.len();
@@ -51,7 +56,7 @@ pub fn copy(root: &Path, jobs: &[Job], mut report: impl FnMut(&Progress)) -> io:
             report(&done);
         }
     }
-    Ok(())
+    Ok(folders)
 }
 
 /// One plain folder name inside the root. The trailing " - " of an empty description is dropped.
@@ -116,8 +121,10 @@ mod tests {
         let job = |folder: &str, files: &[&PathBuf]| Job { folder: folder.into(), files: files.iter().map(|f| f.to_path_buf()).collect() };
 
         let mut reports = Vec::new();
-        copy(&lib, &[job("2023.09.21 - 2023.09.22 - ", &[&a, &b]), job("2023.09.23 - Дача", &[&c])], |p| reports.push(p.clone())).unwrap();
+        let jobs = [job("2023.09.21 - 2023.09.22 - ", &[&a]), job("2023.09.23 - Дача", &[&c]), job("2023.09.21 - 2023.09.22", &[&b])];
+        let folders = copy(&lib, &jobs, |p| reports.push(p.clone())).unwrap();
         let range = lib.join("2023.09.21 - 2023.09.22");
+        assert_eq!(folders, [range.clone(), lib.join("2023.09.23 - Дача")]);
         assert_eq!(fs::read(range.join("A.ARW")).unwrap(), fs::read(&a).unwrap());
         assert_eq!(fs::metadata(range.join("B.JPG")).unwrap().len(), 5);
         assert!(lib.join(r"2023.09.23 - Дача\C.MP4").is_file());

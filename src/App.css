@@ -14,20 +14,48 @@ main {
     padding: 0 16px 16px;
 }
 
-header {
+/* Full width, so the line under it runs edge to edge. */
+main > header {
     position: sticky;
     top: 0;
     z-index: 1;
     display: flex;
     gap: 12px;
     align-items: center;
-    padding: 12px 0;
+    margin: 0 -16px;
+    padding: 12px 16px;
     background: #1b1b1b;
+    border-bottom: 1px solid #333;
+}
+
+.root {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 button {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
     padding: 6px 14px;
     font: inherit;
+}
+
+.icon {
+    font-family: 'Segoe Fluent Icons';
+    font-size: 16px;
+}
+
+.icon-button {
+    padding: 6px 8px;
+}
+
+fieldset {
+    margin: 0;
+    padding: 0;
+    border: 0;
 }
 
 input:not([type]),
@@ -56,15 +84,25 @@ h2 label {
     width: min(720px, calc(100vw - 32px));
     max-height: calc(100vh - 32px);
     overflow: auto;
-    padding: 4px 20px 16px;
+    padding: 12px 20px 16px;
     background: #262626;
     border-radius: 6px;
+}
+
+.dialog header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.dialog header h2 {
+    margin: 0;
 }
 
 .modes {
     display: flex;
     gap: 20px;
-    margin-bottom: 12px;
+    margin: 16px 0 12px;
 }
 
 .target {
@@ -78,8 +116,19 @@ h2 label {
     flex: 1;
 }
 
+/* Fixed width: with a folder per day every field is as wide as the others. */
 .target .muted {
+    flex: 0 0 20em; /* fits "есть в библиотеке · 1234 файла · 123.4 ГБ" */
+    text-align: right;
     white-space: nowrap;
+}
+
+.folder {
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    align-items: center;
+    margin: 6px 0;
 }
 
 progress {

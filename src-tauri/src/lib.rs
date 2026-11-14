@@ -54,7 +54,7 @@ async fn check_library(root: PathBuf, days: Vec<cards::Day>) -> Result<library::
 }
 
 #[tauri::command]
-async fn copy_files(root: PathBuf, jobs: Vec<copy::Job>, on_progress: Channel<copy::Progress>) -> Result<(), String> {
+async fn copy_files(root: PathBuf, jobs: Vec<copy::Job>, on_progress: Channel<copy::Progress>) -> Result<Vec<PathBuf>, String> {
     // A failed send only means the window is gone; the copy goes on.
     blocking(move || copy::copy(&root, &jobs, |p| drop(on_progress.send(p.clone())))).await
 }
@@ -68,6 +68,16 @@ fn open_external(path: PathBuf) -> Result<(), String> {
         return Err(format!("{}: {}", tr("Это не фото и не видео", "Not a photo or video"), path.display()));
     }
     // explorer.exe opens a file the way a double click does. Its exit code is meaningless, so it isn't awaited.
+    std::process::Command::new("explorer").arg(&path).spawn().map(drop).map_err(|e| e.to_string())
+}
+
+/// Opens a folder in Explorer: the library root or a folder just copied into.
+#[tauri::command]
+fn open_folder(path: PathBuf) -> Result<(), String> {
+    // Folders only: given a file, explorer.exe would launch it.
+    if !path.is_dir() {
+        return Err(format!("{}: {}", tr("Папка не найдена", "Folder not found"), path.display()));
+    }
     std::process::Command::new("explorer").arg(&path).spawn().map(drop).map_err(|e| e.to_string())
 }
 
@@ -103,7 +113,7 @@ pub fn run() {
                 responder.respond(response.unwrap());
             });
         })
-        .invoke_handler(tauri::generate_handler![set_language, scan, cards, eject, check_library, copy_files, open_external])
+        .invoke_handler(tauri::generate_handler![set_language, scan, cards, eject, check_library, copy_files, open_external, open_folder])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
