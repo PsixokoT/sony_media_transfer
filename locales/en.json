@@ -22,7 +22,7 @@
 			"duplicated": "patterns must NOT have duplicate items"
 		},
 		"complete": "enter empty to complete",
-        "folder": "Enter folder name for %s"
+		"folder": "Enter folder name for %s"
 	},
 	"storage": {
 		"output": "Output folder",
@@ -36,7 +36,8 @@
 	},
 	"config": "Config",
 	"found_in": "Found in %s",
-    "total": "Total: %i files, %s",
-    "day": "Day",
-    "count": "Count"
+	"total": "Total: %i files, %s",
+	"day": "Day",
+	"count": "Count",
+	"invalide": "invalide"
 }

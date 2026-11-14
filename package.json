@@ -6,7 +6,7 @@
   "scripts": {
     "build": "npx tsc",
     "start": "npm run build && node build/index.js",
-    "test": "npm run build && node build/index.js -o d:\\Test --files DCIM/**/*.{ARW,HIF,JPG} PRIVATE/M4ROOT/**/*.{MP4,XML}"
+    "test": "npm run build && node build/index.js -o d:\\Test --files DCIM/**/*.{ARW,HIF,JPG} M4ROOT/**/*.{MP4,XML}"
   },
   "author": "PsixokoT",
   "license": "MIT License",

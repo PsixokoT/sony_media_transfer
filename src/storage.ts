@@ -10,7 +10,7 @@ const Ajv = AjvModule.default;
 const ajv = new Ajv();
 
 const defaults = {
-    files: ['DCIM/**/*.{ARW,HIF,JPG}', 'PRIVATE/M4ROOT/**/*.{MP4,XML}'],
+    files: ['DCIM/**/*.{ARW,HIF,JPG}', 'M4ROOT/**/*.{MP4,XML}'],
     ignore: ['**/MEDIAPRO.XML'],
     format: '%Y.%m.%d',
     threads_count: 6,
