@@ -30,6 +30,73 @@ button {
     font: inherit;
 }
 
+input:not([type]) {
+    padding: 5px 8px;
+    font: inherit;
+}
+
+.root {
+    flex: 0 1 360px;
+}
+
+h2 label {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    cursor: pointer;
+}
+
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    background: rgb(0 0 0 / 0.6);
+}
+
+.dialog {
+    width: min(720px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    overflow: auto;
+    padding: 4px 20px 16px;
+    background: #262626;
+    border-radius: 6px;
+}
+
+.modes {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 12px;
+}
+
+.target {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin: 6px 0;
+}
+
+.target input {
+    flex: 1;
+}
+
+.target .muted {
+    white-space: nowrap;
+}
+
+progress {
+    width: 100%;
+    margin-top: 8px;
+}
+
+.dialog footer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+}
+
 h2 {
     display: flex;
     gap: 12px;
@@ -54,7 +121,23 @@ h2 {
     gap: 10px;
 }
 
-figure {
+.tile {
+    display: block;
+    cursor: pointer;
+}
+
+/* Already in the library: grey, unchecked by default. */
+.tile.copied img {
+    filter: grayscale(1);
+    opacity: 0.4;
+}
+
+.check {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 18px;
+    height: 18px;
     margin: 0;
 }
 
@@ -96,7 +179,7 @@ figure {
     background: rgb(0 0 0 / 0.6);
 }
 
-figcaption {
+.caption {
     margin-top: 4px;
     font-size: 12px;
     line-height: 1.4;

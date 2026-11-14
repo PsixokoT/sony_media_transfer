@@ -1,15 +1,36 @@
 mod cards;
+mod copy;
 mod exif;
+mod library;
 
+use std::io;
 use std::path::PathBuf;
 use tauri::http::{Response, StatusCode, header};
+use tauri::ipc::Channel;
+
+/// Disk work goes to a blocking thread so it doesn't hold up the async runtime.
+async fn blocking<T: Send + 'static>(work: impl FnOnce() -> io::Result<T> + Send + 'static) -> Result<T, String> {
+    match tauri::async_runtime::spawn_blocking(work).await {
+        Ok(result) => result.map_err(|e| e.to_string()),
+        Err(e) => Err(e.to_string()),
+    }
+}
 
 #[tauri::command]
 async fn scan() -> Result<cards::Scan, String> {
-    // Disk work goes to a blocking thread so it doesn't hold up the async runtime.
-    tauri::async_runtime::spawn_blocking(|| cards::scan(&cards::removable_drives()))
-        .await
-        .map_err(|e| e.to_string())
+    blocking(|| Ok(cards::scan(&cards::removable_drives()))).await
+}
+
+/// The days come back from the UI as `scan` gave them, so nothing is kept between calls.
+#[tauri::command]
+async fn check_library(root: PathBuf, days: Vec<cards::Day>) -> Result<library::Library, String> {
+    blocking(move || library::check(&root, &days)).await
+}
+
+#[tauri::command]
+async fn copy_files(root: PathBuf, jobs: Vec<copy::Job>, on_progress: Channel<copy::Progress>) -> Result<(), String> {
+    // A failed send only means the window is gone; the copy goes on.
+    blocking(move || copy::copy(&root, &jobs, |p| drop(on_progress.send(p.clone())))).await
 }
 
 /// `thumb://localhost/{offset}-{len}-{url-encoded path}` -> that JPEG. The whole location is in the URL,
@@ -39,7 +60,7 @@ pub fn run() {
                 responder.respond(response.unwrap());
             });
         })
-        .invoke_handler(tauri::generate_handler![scan])
+        .invoke_handler(tauri::generate_handler![scan, check_library, copy_files])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

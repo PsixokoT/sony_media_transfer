@@ -2,20 +2,20 @@
 
 use crate::exif;
 use chrono::{DateTime, Local};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, File, Metadata};
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FileEntry {
     pub path: PathBuf,
     pub size: u64,
 }
 
 /// A JPEG lying in a file: embedded in ARW/JPG/HIF, or the whole M4ROOT\THMBNL\*.JPG.
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Thumb {
     pub path: PathBuf,
     pub offset: u64,
@@ -34,7 +34,7 @@ impl Thumb {
 }
 
 /// One tile: a frame (ARW + JPG) or a clip (MP4 + XML + proxy).
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Item {
     pub name: String,
     pub video: bool,
@@ -45,7 +45,7 @@ pub struct Item {
     pub rotate: u16,
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Day {
     pub day: String,
     pub items: Vec<Item>,
@@ -204,7 +204,7 @@ fn merge(into: &mut Item, from: Item) {
 }
 
 /// `<CreationDate value="2023-09-21T15:30:12+03:00"/>` -> "2023-09-21 15:30:12".
-fn xml_date(path: &Path) -> Option<String> {
+pub fn xml_date(path: &Path) -> Option<String> {
     let xml = fs::read_to_string(path).ok()?;
     let start = xml.find("<CreationDate value=\"")? + "<CreationDate value=\"".len();
     let date = xml.get(start..start + 19)?.replacen('T', " ", 1);
@@ -217,13 +217,13 @@ fn file_time(meta: &Metadata) -> String {
 }
 
 /// Folder contents. An unreadable folder (or one that doesn't exist) is just empty.
-fn list(dir: &Path) -> Vec<(PathBuf, Metadata)> {
+pub fn list(dir: &Path) -> Vec<(PathBuf, Metadata)> {
     let Ok(rd) = fs::read_dir(dir) else { return Vec::new() };
     rd.flatten().filter_map(|e| Some((e.path(), e.metadata().ok()?))).collect()
 }
 
 /// "DSC00001.arw" -> ("DSC00001", "ARW")
-fn name_ext(path: &Path) -> (String, String) {
+pub fn name_ext(path: &Path) -> (String, String) {
     let part = |s: Option<&std::ffi::OsStr>| s.unwrap_or_default().to_string_lossy().into_owned();
     (part(path.file_stem()), part(path.extension()).to_uppercase())
 }
