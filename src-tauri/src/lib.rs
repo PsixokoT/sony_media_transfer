@@ -33,6 +33,18 @@ async fn copy_files(root: PathBuf, jobs: Vec<copy::Job>, on_progress: Channel<co
     blocking(move || copy::copy(&root, &jobs, |p| drop(on_progress.send(p.clone())))).await
 }
 
+/// Opens a card file in its default Windows program: photo viewer, video player.
+#[tauri::command]
+fn open_external(path: PathBuf) -> Result<(), String> {
+    let (_, ext) = cards::name_ext(&path);
+    // Media only: whatever the UI sends, an .exe is never launched.
+    if !cards::PHOTO_EXTS.contains(&ext.as_str()) && ext != "MP4" {
+        return Err(format!("not a photo or video: {}", path.display()));
+    }
+    // explorer.exe opens a file the way a double click does. Its exit code is meaningless, so it isn't awaited.
+    std::process::Command::new("explorer").arg(&path).spawn().map(drop).map_err(|e| e.to_string())
+}
+
 /// `thumb://localhost/{offset}-{len}-{url-encoded path}` -> that JPEG. The whole location is in the URL,
 /// so there is no state to go stale between scans. Only photo files (ARW/JPG/HIF) are served.
 fn thumb(path: &str) -> Option<Vec<u8>> {
@@ -60,7 +72,7 @@ pub fn run() {
                 responder.respond(response.unwrap());
             });
         })
-        .invoke_handler(tauri::generate_handler![scan, check_library, copy_files])
+        .invoke_handler(tauri::generate_handler![scan, check_library, copy_files, open_external])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

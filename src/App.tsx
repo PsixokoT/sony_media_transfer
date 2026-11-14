@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
 import CopyDialog from './CopyDialog';
-import { bytes, total, type FileEntry, type Item, type Library, type Scan, type Thumb } from './model';
+import Viewer from './Viewer';
+import { bytes, thumbUrl, total, type FileEntry, type Item, type Library, type Scan } from './model';
 import './App.css';
-
-const thumbUrl = (t: Thumb) => convertFileSrc(`${t.offset}-${t.len}-${t.path}`, 'thumb');
 
 const dayTitle = (day: string) =>
     new Date(`${day}T00:00`).toLocaleDateString('ru-RU', {
@@ -29,6 +28,11 @@ export default function App() {
     // Tiles whose checkbox differs from the default: checked unless already copied.
     const [toggled, setToggled] = useState(new Set<string>());
     const [dialog, setDialog] = useState(false);
+    // Tile keys: the cursor, where a Shift range starts, and the selection Space and checkboxes act on.
+    const [current, setCurrent] = useState<string>();
+    const [anchor, setAnchor] = useState<string>();
+    const [selected, setSelected] = useState(new Set<string>());
+    const [viewing, setViewing] = useState(false);
 
     async function refresh() {
         setBusy(true);
@@ -86,6 +90,55 @@ export default function App() {
         .map((d): [string, FileEntry[]] => [d.day, d.items.filter(isChecked).flatMap(toCopy)])
         .filter(([, files]) => files.length);
     const chosenFiles = chosen.flatMap(([, files]) => files);
+
+    const flat = useMemo(() => scan?.days.flatMap((d) => d.items) ?? [], [scan]);
+    const index = useMemo(() => new Map(flat.map((item, i) => [key(item), i])), [flat]);
+    const pos = index.get(current ?? '') ?? -1;
+
+    /** Cursor to tile i, the way Explorer and Lightroom do it: alone it selects only that tile,
+     *  Shift selects from the anchor to it, Ctrl adds it to the selection or takes it out. */
+    function select(i: number, mods: { shiftKey: boolean; ctrlKey: boolean }) {
+        const k = key(flat[i]);
+        setCurrent(k);
+        if (mods.shiftKey) {
+            const a = index.get(anchor ?? '') ?? i;
+            setSelected(new Set(flat.slice(Math.min(a, i), Math.max(a, i) + 1).map(key)));
+            return;
+        }
+        setAnchor(k);
+        const next = new Set(mods.ctrlKey ? selected : []);
+        if (!next.delete(k)) next.add(k);
+        setSelected(next);
+    }
+
+    // The selection, or the cursor tile when nothing is selected.
+    const targets = () => (selected.size ? flat.filter((i) => selected.has(key(i))) : flat.slice(pos, pos + 1));
+
+    // ← → move the cursor (in the grid and in the viewer), Shift+← → extend the selection, Ctrl+A selects all,
+    // Space checks or unchecks the selection, Enter opens, Esc closes.
+    // No deps: it subscribes again on every render, so it always sees the current state.
+    useEffect(() => {
+        function onKey(e: KeyboardEvent) {
+            const target = e.target as HTMLElement;
+            if (dialog || target.matches('input:not([type=checkbox])')) return; // typing, or the copy dialog
+            if (target.matches('button') && (e.key === 'Enter' || e.key === ' ')) return; // pressing a button
+            const move = (by: number) =>
+                flat.length && select(Math.min(Math.max(pos + by, 0), flat.length - 1), { shiftKey: e.shiftKey, ctrlKey: false });
+            const t = targets();
+            if (e.key === 'ArrowLeft') move(-1);
+            else if (e.key === 'ArrowRight') move(1);
+            else if (e.code === 'KeyA' && e.ctrlKey) setSelected(new Set(index.keys())); // code: also on a Russian layout
+            else if (e.key === ' ' && t.length) check(t, !t.every(isChecked)); // mixed: check them all
+            else if (e.key === 'Enter' && flat[pos]) setViewing(true);
+            else if (e.key === 'Escape') setViewing(false);
+            else return;
+            e.preventDefault(); // no page scroll on Space, no native checkbox toggle or video seek on top of ours
+        }
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    });
+
+    useEffect(() => document.querySelector('.tile.current')?.scrollIntoView({ block: 'nearest' }), [current]);
 
     function changeRoot(value: string) {
         localStorage.setItem('root', value);
@@ -147,7 +200,19 @@ export default function App() {
                     </h2>
                     <div className="grid">
                         {day.items.map((item) => (
-                            <label key={key(item)} className={isCopied(item) ? 'tile copied' : 'tile'}>
+                            <div
+                                key={key(item)}
+                                className={[
+                                    'tile',
+                                    isCopied(item) && 'copied',
+                                    key(item) === current && 'current',
+                                    selected.has(key(item)) && 'selected',
+                                ]
+                                    .filter(Boolean)
+                                    .join(' ')}
+                                onClick={(e) => select(index.get(key(item))!, e)}
+                                onDoubleClick={() => setViewing(true)}
+                            >
                                 <div className="thumb">
                                     {item.thumb ? (
                                         <img
@@ -163,7 +228,9 @@ export default function App() {
                                         type="checkbox"
                                         className="check"
                                         checked={isChecked(item)}
-                                        onChange={(e) => check([item], e.target.checked)}
+                                        // On a selected tile it checks the whole selection, like in Lightroom.
+                                        onChange={(e) => check(selected.has(key(item)) ? targets() : [item], e.target.checked)}
+                                        onClick={(e) => e.stopPropagation()} // checks, doesn't select
                                     />
                                 </div>
                                 <div className="caption">
@@ -174,11 +241,21 @@ export default function App() {
                                         {isCopied(item) && ' · скопировано'}
                                     </span>
                                 </div>
-                            </label>
+                            </div>
                         ))}
                     </div>
                 </section>
             ))}
+
+            {viewing && flat[pos] && (
+                <Viewer
+                    key={current}
+                    item={flat[pos]}
+                    checked={isChecked(flat[pos])}
+                    onCheck={(v) => check([flat[pos]], v)}
+                    onClose={() => setViewing(false)}
+                />
+            )}
 
             {dialog && lib && (
                 <CopyDialog root={root} chosen={chosen} existing={lib.existing} onClose={closeDialog} />

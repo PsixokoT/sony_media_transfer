@@ -119,11 +119,27 @@ h2 {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
     gap: 10px;
+    user-select: none; /* Shift+click and double click select tiles, not caption text */
 }
 
 .tile {
-    display: block;
     cursor: pointer;
+    scroll-margin: 70px 0 10px; /* scrolled to by the keyboard: not under the sticky header */
+}
+
+/* Cursor: dashed when Ctrl+click took it out of the selection, solid when selected. */
+.tile.current .thumb {
+    outline: 2px dashed #4a9eff;
+    outline-offset: 2px;
+}
+
+.tile.selected .thumb {
+    outline: 2px solid #4a9eff;
+    outline-offset: 2px;
+}
+
+.tile.selected .caption {
+    color: #8cc4ff;
 }
 
 /* Already in the library: grey, unchecked by default. */
@@ -156,18 +172,74 @@ h2 {
     width: 100%;
     height: 100%;
     object-fit: contain;
-    /* rotation comes from the ARW/JPG EXIF via the classes below, not from the preview itself */
+    /* rotation comes from the ARW/JPG EXIF via the r* classes, not from the preview itself */
     image-orientation: none;
 }
 
+/* `rotate`, not `transform`: it adds up with the viewer's `translate`. */
 .r3 {
-    transform: rotate(180deg);
+    rotate: 180deg;
 }
 .r6 {
-    transform: rotate(90deg);
+    rotate: 90deg;
 }
 .r8 {
-    transform: rotate(-90deg);
+    rotate: -90deg;
+}
+
+/* No page scrollbar or wheel scrolling behind the viewer. */
+body:has(.viewer) {
+    overflow: hidden;
+}
+
+.viewer {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    background: #000;
+}
+
+/* Centred by translate so a box wider than the screen (a rotated photo before rotation) stays centred. */
+.viewer .media {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    translate: -50% -50%;
+    width: 100vw;
+    height: 100vh;
+    object-fit: contain;
+}
+
+/* Turned by 90°: the box is laid out with width and height swapped. */
+.viewer .media.r6,
+.viewer .media.r8 {
+    width: 100vh;
+    height: 100vw;
+}
+
+.viewer .empty {
+    display: grid;
+    place-items: center;
+}
+
+.viewer .bar {
+    position: absolute;
+    inset: 0 0 auto;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 8px 16px;
+    background: rgb(0 0 0 / 0.6);
+}
+
+.viewer .bar label {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.spacer {
+    flex: 1;
 }
 
 .badge {
