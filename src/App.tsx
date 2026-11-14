@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import CopyDialog from './CopyDialog';
+import Settings from './Settings';
 import Viewer from './Viewer';
+import { setLang, t, type Lang } from './i18n';
 import { bytes, thumbUrl, total, type FileEntry, type Item, type Library, type Scan } from './model';
 import './App.css';
 
 const dayTitle = (day: string) =>
-    new Date(`${day}T00:00`).toLocaleDateString('ru-RU', {
+    new Date(`${day}T00:00`).toLocaleDateString(t.locale, {
         weekday: 'short',
         day: 'numeric',
         month: 'long',
@@ -33,11 +35,16 @@ export default function App() {
     const [anchor, setAnchor] = useState<string>();
     const [selected, setSelected] = useState(new Set<string>());
     const [viewing, setViewing] = useState(false);
+    const [settings, setSettings] = useState(false);
+    const [ejected, setEjected] = useState(false);
+    const [, setLangState] = useState<Lang>(); // only to re-render after setLang
 
     async function refresh() {
         setBusy(true);
         try {
-            setScan(await invoke<Scan>('scan'));
+            const found = await invoke<Scan>('scan');
+            setScan(found);
+            if (found.cards.length) setEjected(false);
             setToggled(new Set());
             setError(undefined);
         } catch (e) {
@@ -50,6 +57,30 @@ export default function App() {
     useEffect(() => {
         refresh();
     }, []);
+
+    // Hot plug: the drive list is polled, and the cards are read again only when it changes.
+    useEffect(() => {
+        if (busy) return;
+        let stale = false;
+        const timer = setInterval(async () => {
+            const cards = await invoke<string[]>('cards');
+            if (!stale && cards.join() !== scan?.cards.join()) refresh();
+        }, 2000);
+        return () => {
+            stale = true;
+            clearInterval(timer);
+        };
+    }, [scan, busy]);
+
+    async function eject() {
+        try {
+            await invoke('eject');
+            setEjected(true);
+            refresh();
+        } catch (e) {
+            setError(String(e)); // not refreshed: that would clear the error
+        }
+    }
 
     useEffect(() => {
         setLib(undefined);
@@ -120,7 +151,7 @@ export default function App() {
     useEffect(() => {
         function onKey(e: KeyboardEvent) {
             const target = e.target as HTMLElement;
-            if (dialog || target.matches('input:not([type=checkbox])')) return; // typing, or the copy dialog
+            if (dialog || settings || target.matches('input:not([type=checkbox])')) return; // typing, or a dialog
             if (target.matches('button') && (e.key === 'Enter' || e.key === ' ')) return; // pressing a button
             const move = (by: number) =>
                 flat.length && select(Math.min(Math.max(pos + by, 0), flat.length - 1), { shiftKey: e.shiftKey, ctrlKey: false });
@@ -157,31 +188,25 @@ export default function App() {
         <main>
             <header>
                 <button onClick={refresh} disabled={busy}>
-                    {busy ? 'Поиск…' : 'Обновить'}
+                    {busy ? t.searching : t.refresh}
                 </button>
-                <input
-                    className="root"
-                    placeholder="Папка библиотеки, например e:\FOTO\Sony A7IV\PHOTOS"
-                    defaultValue={root}
-                    onBlur={(e) => changeRoot(e.target.value.trim())}
-                    onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-                />
+                <button onClick={eject} disabled={busy || !scan?.cards.length}>
+                    {t.eject}
+                </button>
                 <button disabled={!lib || !chosenFiles.length} onClick={() => setDialog(true)}>
-                    Копировать {chosenFiles.length ? `${chosenFiles.length} · ${bytes(total(chosenFiles))}` : ''}
+                    {t.copy} {chosenFiles.length ? `${chosenFiles.length} · ${bytes(total(chosenFiles))}` : ''}
                 </button>
                 <span className="muted">
-                    {scan && root && !lib && !error && 'Проверка библиотеки… '}
-                    {scan?.cards.length ? `Карты: ${scan.cards.join(', ')}` : ''}
+                    {!root && `${t.noRoot} `}
+                    {scan && root && !lib && !error && `${t.checkingLibrary} `}
+                    {scan?.cards.length ? `${t.cards}: ${scan.cards.join(', ')}` : ''}
                 </span>
+                <span className="spacer" />
+                <button onClick={() => setSettings(true)}>{t.settings}</button>
             </header>
 
             {error && <p className="error">{error}</p>}
-            {scan && !scan.cards.length && (
-                <p className="muted">
-                    Карта камеры не найдена. Подключите камеру в режиме MassStorage (MSC) или
-                    вставьте карту в картридер и нажмите «Обновить».
-                </p>
-            )}
+            {scan && !scan.cards.length && <p className="muted">{ejected ? t.ejected : t.noCard}</p>}
 
             {scan?.days.map((day) => (
                 <section key={day.day}>
@@ -221,7 +246,7 @@ export default function App() {
                                             src={thumbUrl(item.thumb)}
                                         />
                                     ) : (
-                                        <span className="muted">нет превью</span>
+                                        <span className="muted">{t.noPreview}</span>
                                     )}
                                     {item.video && <span className="badge">▶</span>}
                                     <input
@@ -238,7 +263,7 @@ export default function App() {
                                     <br />
                                     <span className="muted">
                                         {exts(item)}
-                                        {isCopied(item) && ' · скопировано'}
+                                        {isCopied(item) && ` · ${t.copied}`}
                                     </span>
                                 </div>
                             </div>
@@ -259,6 +284,18 @@ export default function App() {
 
             {dialog && lib && (
                 <CopyDialog root={root} chosen={chosen} existing={lib.existing} onClose={closeDialog} />
+            )}
+
+            {settings && (
+                <Settings
+                    root={root}
+                    onRoot={changeRoot}
+                    onLang={(l) => {
+                        setLang(l);
+                        setLangState(l);
+                    }}
+                    onClose={() => setSettings(false)}
+                />
             )}
         </main>
     );

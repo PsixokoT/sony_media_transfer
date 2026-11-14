@@ -30,13 +30,10 @@ button {
     font: inherit;
 }
 
-input:not([type]) {
+input:not([type]),
+select {
     padding: 5px 8px;
     font: inherit;
-}
-
-.root {
-    flex: 0 1 360px;
 }
 
 h2 label {

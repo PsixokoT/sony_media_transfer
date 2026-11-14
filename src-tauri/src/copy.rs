@@ -22,7 +22,7 @@ pub struct Progress {
 
 pub fn copy(root: &Path, jobs: &[Job], mut report: impl FnMut(&Progress)) -> io::Result<()> {
     if !root.is_dir() {
-        let msg = format!("Папка библиотеки не найдена: {}", root.display());
+        let msg = format!("{}: {}", crate::tr("Папка библиотеки не найдена", "Library folder not found"), root.display());
         return Err(io::Error::new(io::ErrorKind::NotFound, msg));
     }
     // Big chunks: fewer round trips to the card and the HDD. Files go one by one, an HDD hates parallel writes.
@@ -32,14 +32,14 @@ pub fn copy(root: &Path, jobs: &[Job], mut report: impl FnMut(&Progress)) -> io:
         let dir = root.join(folder_name(&job.folder)?);
         fs::create_dir_all(&dir)?;
         for src in &job.files {
-            let dst = dir.join(src.file_name().ok_or_else(|| io::Error::other("путь без имени файла"))?);
+            let dst = dir.join(src.file_name().ok_or_else(|| io::Error::other(crate::tr("путь без имени файла", "path without a file name")))?);
             let size = fs::metadata(src)?.len();
             match fs::metadata(&dst) {
                 // Same name and size already there: copied earlier, maybe into this folder by hand.
                 Ok(m) if m.len() == size => done.bytes += size,
                 // Never overwrite the library.
                 Ok(_) => {
-                    let msg = format!("{} уже есть, и размер у него другой", dst.display());
+                    let msg = format!("{}: {}", dst.display(), crate::tr("уже есть, и размер у него другой", "already exists with a different size"));
                     return Err(io::Error::new(io::ErrorKind::AlreadyExists, msg));
                 }
                 Err(_) => copy_file(src, &dst, &mut buf, |n| {
@@ -58,7 +58,7 @@ pub fn copy(root: &Path, jobs: &[Job], mut report: impl FnMut(&Progress)) -> io:
 fn folder_name(name: &str) -> io::Result<&str> {
     let name = name.trim().trim_end_matches([' ', '-', '.']);
     if name.is_empty() || name.contains(['\\', '/', ':', '*', '?', '"', '<', '>', '|']) {
-        let msg = format!("Недопустимое имя папки: «{name}»");
+        let msg = format!("{}: «{name}»", crate::tr("Недопустимое имя папки", "Invalid folder name"));
         return Err(io::Error::new(io::ErrorKind::InvalidInput, msg));
     }
     Ok(name)
@@ -76,7 +76,7 @@ fn copy_file(src: &Path, dst: &Path, buf: &mut [u8], on_chunk: impl FnMut(u64)) 
     let (want, got) = (fs::metadata(src)?.len(), fs::metadata(dst)?.len());
     if want != got {
         let _ = fs::remove_file(dst);
-        return Err(io::Error::other(format!("{}: записано {got} байт из {want}", dst.display())));
+        return Err(io::Error::other(format!("{}: {got} / {want} {}", dst.display(), crate::tr("байт записано", "bytes written"))));
     }
     Ok(())
 }

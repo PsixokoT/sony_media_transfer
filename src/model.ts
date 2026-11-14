@@ -1,4 +1,5 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { t } from './i18n';
 
 // Shapes of what the Rust commands return.
 
@@ -21,4 +22,4 @@ export const thumbUrl = (t: Thumb) => convertFileSrc(`${t.offset}-${t.len}-${t.p
 
 export const total =(files: FileEntry[]) => files.reduce((sum, f) => sum + f.size, 0);
 
-export const bytes = (n: number) => (n > 1e9 ? `${(n / 1e9).toFixed(1)} ГБ` : `${(n / 1e6).toFixed(0)} МБ`);
+export const bytes = (n: number) => (n > 1e9 ? `${(n / 1e9).toFixed(1)} ${t.gb}` : `${(n / 1e6).toFixed(0)} ${t.mb}`);

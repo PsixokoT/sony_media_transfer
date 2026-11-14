@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Channel, invoke } from '@tauri-apps/api/core';
+import { t } from './i18n';
 import { bytes, total, type FileEntry } from './model';
 
 type Target = { name: string; days: string[]; files: FileEntry[] };
@@ -37,7 +38,7 @@ export default function CopyDialog(props: {
     const [start, setStart] = useState(0);
     const [result, setResult] = useState<{ ok: boolean; text: string }>();
 
-    const files = targets.flatMap((t) => t.files);
+    const files = targets.flatMap((target) => target.files);
     const size = total(files);
     const existingNames = new Set(Object.values(existing));
 
@@ -51,10 +52,10 @@ export default function CopyDialog(props: {
         channel.onmessage = setProgress;
         setProgress({ bytes: 0, files: 0 });
         setStart(performance.now());
-        const jobs = targets.map((t) => ({ folder: t.name, files: t.files.map((f) => f.path) }));
+        const jobs = targets.map((target) => ({ folder: target.name, files: target.files.map((f) => f.path) }));
         try {
             await invoke('copy_files', { root, jobs, onProgress: channel });
-            setResult({ ok: true, text: `Готово: ${files.length} файлов, ${bytes(size)}` });
+            setResult({ ok: true, text: `${t.done}: ${t.files(files.length)}, ${bytes(size)}` });
         } catch (e) {
             setResult({ ok: false, text: String(e) });
         }
@@ -64,31 +65,31 @@ export default function CopyDialog(props: {
     return (
         <div className="overlay">
             <div className="dialog">
-                <h2>Копирование в {root}</h2>
+                <h2>
+                    {t.copyingTo} {root}
+                </h2>
                 {!progress && (
                     <>
                         <div className="modes">
                             <label>
-                                <input type="radio" checked={!perDay} onChange={() => mode(false)} /> Одна папка на
-                                диапазон
+                                <input type="radio" checked={!perDay} onChange={() => mode(false)} /> {t.oneFolder}
                             </label>
                             <label>
-                                <input type="radio" checked={perDay} onChange={() => mode(true)} /> Папка на каждый
-                                день
+                                <input type="radio" checked={perDay} onChange={() => mode(true)} /> {t.folderPerDay}
                             </label>
                         </div>
-                        {targets.map((t, i) => (
-                            <div className="target" key={t.days[0]}>
+                        {targets.map((target, i) => (
+                            <div className="target" key={target.days[0]}>
                                 <input
-                                    value={t.name}
+                                    value={target.name}
                                     autoFocus={i === 0}
                                     onChange={(e) =>
                                         setTargets(targets.map((u, j) => (j === i ? { ...u, name: e.target.value } : u)))
                                     }
                                 />
                                 <span className="muted">
-                                    {existingNames.has(t.name) && 'есть в библиотеке · '}
-                                    {t.files.length} файлов · {bytes(total(t.files))}
+                                    {existingNames.has(target.name) && `${t.inLibrary} · `}
+                                    {t.files(target.files.length)} · {bytes(total(target.files))}
                                 </span>
                             </div>
                         ))}
@@ -98,16 +99,17 @@ export default function CopyDialog(props: {
                     <>
                         <progress value={progress.bytes} max={size || 1} />
                         <p>
-                            {progress.files} из {files.length} файлов · {bytes(progress.bytes)} из {bytes(size)}
-                            {seconds > 1 && ` · ${(progress.bytes / 1e6 / seconds).toFixed(0)} МБ/с`}
+                            {progress.files} {t.of} {t.files(files.length)} · {bytes(progress.bytes)} {t.of}{' '}
+                            {bytes(size)}
+                            {seconds > 1 && ` · ${(progress.bytes / 1e6 / seconds).toFixed(0)} ${t.mbPerSecond}`}
                         </p>
                     </>
                 )}
                 {result && <p className={result.ok ? undefined : 'error'}>{result.text}</p>}
                 <footer>
-                    {!progress && <button onClick={run}>Копировать</button>}
+                    {!progress && <button onClick={run}>{t.copy}</button>}
                     <button disabled={progress && !result} onClick={() => props.onClose(!!progress)}>
-                        {progress ? 'Закрыть' : 'Отмена'}
+                        {progress ? t.close : t.cancel}
                     </button>
                 </footer>
             </div>

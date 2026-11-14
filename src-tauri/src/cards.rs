@@ -77,6 +77,11 @@ pub fn removable_drives() -> Vec<PathBuf> {
         .collect()
 }
 
+/// Removable drives that are camera cards. Cheap: a few folder checks per drive, no file is read.
+pub fn connected() -> Vec<PathBuf> {
+    removable_drives().into_iter().filter(|r| is_card(r)).collect()
+}
+
 pub fn scan(roots: &[PathBuf]) -> Scan {
     let cards: Vec<PathBuf> = roots.iter().filter(|r| is_card(r)).cloned().collect();
     let mut items: HashMap<(String, String), Item> = HashMap::new();

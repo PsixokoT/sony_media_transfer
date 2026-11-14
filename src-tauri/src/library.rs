@@ -21,7 +21,7 @@ const MEDIA_EXTS: [&str; 5] = ["ARW", "JPG", "HIF", "MP4", "XML"];
 
 pub fn check(root: &Path, days: &[Day]) -> io::Result<Library> {
     if !root.is_dir() {
-        let msg = format!("Папка библиотеки не найдена: {}", root.display());
+        let msg = format!("{}: {}", crate::tr("Папка библиотеки не найдена", "Library folder not found"), root.display());
         return Err(io::Error::new(io::ErrorKind::NotFound, msg));
     }
     // Top-level folders with a date range: (from, to, name).

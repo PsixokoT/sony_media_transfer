@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+import { t } from './i18n';
 import { thumbUrl, type Item } from './model';
 
 const isProxy = (path: string) => /S03\.MP4$/i.test(path);
@@ -54,9 +55,9 @@ export default function Viewer(props: { item: Item; checked: boolean; onCheck: (
             {!image && !video && (
                 <div className="media empty">
                     {item.video ? (
-                        <button onClick={openExternal}>Клип здесь не воспроизводится. Открыть в системном плеере</button>
+                        <button onClick={openExternal}>{t.cantPlay}</button>
                     ) : (
-                        <span className="muted">нет превью</span>
+                        <span className="muted">{t.noPreview}</span>
                     )}
                 </div>
             )}
@@ -67,10 +68,10 @@ export default function Viewer(props: { item: Item; checked: boolean; onCheck: (
                 </label>
                 <span className="muted">
                     {item.time}
-                    {video && isProxy(video.path) && ' · прокси'}
+                    {video && isProxy(video.path) && ` · ${t.proxy}`}
                 </span>
                 <span className="spacer" />
-                <button onClick={openExternal}>Открыть во внешней программе</button>
+                <button onClick={openExternal}>{t.openExternal}</button>
                 <button onClick={props.onClose} title="Esc">
                     ✕
                 </button>

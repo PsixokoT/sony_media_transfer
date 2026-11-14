@@ -18,7 +18,16 @@ tauri = { version = "2", features = ["protocol-asset"] }
 serde = { version = "1", features = ["derive"] }
 percent-encoding = "2"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-windows-sys = { version = "0.60", features = ["Win32_Storage_FileSystem", "Win32_System_Diagnostics_Debug"] }
+windows-sys = { version = "0.60", features = [
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Devices_Properties",
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+] }
+tauri-plugin-dialog = "2"
 
 [profile.release]
 codegen-units = 1
