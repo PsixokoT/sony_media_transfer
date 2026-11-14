@@ -2,18 +2,19 @@ import { useRef, useState } from 'react';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { t } from './i18n';
 import { thumbUrl, type Item } from './model';
+import Preview from './Preview';
 
 const isProxy = (path: string) => /S03\.MP4$/i.test(path);
 
 /**
- * A whole JPG beats the 1616×1080 preview inside the ARW (or the JPEG item inside the HIF). The browser turns
+ * A whole JPG beats the 1616×1080 preview inside the ARW (or the HEVC preview inside the HIF). The browser turns
  * a whole JPG by its own EXIF (thumb:// is another origin, so `image-orientation: none` is ignored);
  * embedded previews carry no orientation and are turned by the r* class.
  */
 function photo(item: Item) {
     const jpg = item.files.find((f) => /\.JPG$/i.test(f.path));
-    if (jpg) return { src: thumbUrl({ path: jpg.path, offset: 0, len: jpg.size }), className: 'media' };
-    return item.thumb && { src: thumbUrl(item.thumb), className: `media r${item.rotate}` };
+    if (jpg) return { thumb: { path: jpg.path, offset: 0, len: jpg.size, hevc: [] }, className: 'media' };
+    return item.thumb && { thumb: item.thumb, className: `media r${item.rotate}` };
 }
 
 /** Full-screen view of one tile. Keys are handled by App; remount it (key) for each tile. */
@@ -37,7 +38,7 @@ export default function Viewer(props: { item: Item; checked: boolean; onCheck: (
 
     return (
         <div className="viewer">
-            {image && <img {...image} />}
+            {image && <Preview {...image} big />}
             {item.video && video && (
                 <video
                     key={video.path}

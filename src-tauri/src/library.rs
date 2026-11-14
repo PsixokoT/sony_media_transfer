@@ -154,7 +154,7 @@ mod tests {
 
         let arw = put(card.join("DSC00001.ARW"), &sample::tiff(date));
         let jpg = put(card.join("DSC00001.JPG"), &sample::jpeg(date));
-        let hif = put(card.join("DSC00001.HIF"), &sample::heif(date));
+        let hif = put(card.join("DSC00001.HIF"), &sample::heif(date, 0));
         let wrapped = put(card.join("DSC00002.ARW"), &sample::tiff(date));
         let mp4 = put(card.join("C0001.MP4"), b"video");
         let xml = put(card.join("C0001M01.XML"), br#"<CreationDate value="2023-09-22T10:00:00+03:00"/>"#);
@@ -163,7 +163,7 @@ mod tests {
         let trip = lib.join("2023.09.20 - 2023.09.22 - Поездка");
         put(trip.join(r"2023.09.21\DSC00001.ARW"), &sample::tiff(date)); // nested day folder
         put(trip.join("DSC00001.JPG"), &sample::jpeg("2023:09:22 15:30:12\0")); // in the folder's range: EXIF isn't read
-        put(lib.join(r"2023.10.05 - Позже\DSC00001.HIF"), &sample::heif(date)); // outside the folder's range, but EXIF matches
+        put(lib.join(r"2023.10.05 - Позже\DSC00001.HIF"), &sample::heif(date, 0)); // outside the folder's range, but EXIF matches
         put(lib.join(r"2020.01.01 - Old\DSC00002.ARW"), &sample::tiff("2020:01:01 10:00:00\0")); // same size, older shot
         put(trip.join("C0001.MP4"), b"video");
         put(trip.join("C0001M01.XML"), br#"<CreationDate value="2023-09-22T10:00:00+03:00"/>"#);

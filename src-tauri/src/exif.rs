@@ -1,6 +1,7 @@
 //! Minimal EXIF reader for ARW, JPG and HIF. It reads only the few bytes it needs,
 //! not the whole 30–60 MB ARW the way general-purpose crates do.
 
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
@@ -9,10 +10,25 @@ use std::path::Path;
 pub struct Exif {
     /// DateTimeOriginal as "YYYY-MM-DD HH:MM:SS" (camera local time).
     pub date: Option<String>,
-    /// EXIF Orientation: 1 normal, 3 = 180°, 6 = 90° CW, 8 = 90° CCW.
+    /// EXIF Orientation: 1 normal, 3 = 180°, 6 = 90° CW, 8 = 90° CCW. In a HEIF, its irot wins.
     pub orientation: u16,
     /// Largest embedded JPEG: (absolute offset in the file, length).
     pub preview: Option<(u64, u64)>,
+    /// HEVC thumbnails of a HEIF, largest first. Sony HIF: 1616×1080 in the shot's chroma, 320×212 always 4:2:0.
+    pub hevc: Vec<Hevc>,
+}
+
+/// An HEVC image in a HEIF. The UI decodes it with WebCodecs: the WebView has no HEIF decoder, and Windows has
+/// none without the HEIF Image Extensions.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Hevc {
+    pub offset: u64,
+    pub len: u64,
+    /// The hvcC box: decoder configuration with VPS/SPS/PPS.
+    pub config: Vec<u8>,
+    /// From ispe. The coded picture is padded (1616×1080 is coded as 1664×1088); the decoder crops it to this.
+    pub width: u32,
+    pub height: u32,
 }
 
 pub fn read(path: &Path) -> io::Result<Exif> {
@@ -23,9 +39,9 @@ pub fn read_from<R: Read + Seek>(r: &mut R) -> io::Result<Exif> {
     let mut magic = [0u8; 8];
     r.read_exact(&mut magic)?;
     // Where the TIFF header starts: 0 for ARW, inside APP1 for JPEG, inside the Exif item for HEIF.
-    let (base, heif_jpeg) = match magic {
+    let (base, heif) = match magic {
         [0xFF, 0xD8, ..] => (jpeg_tiff_start(r)?, None),
-        [_, _, _, _, b'f', b't', b'y', b'p'] => heif(r)?,
+        [_, _, _, _, b'f', b't', b'y', b'p'] => heif(r).map(|h| (h.exif, Some(h)))?,
         _ => (0, None),
     };
     r.seek(SeekFrom::Start(base))?;
@@ -37,7 +53,11 @@ pub fn read_from<R: Read + Seek>(r: &mut R) -> io::Result<Exif> {
         _ => return Err(bad("not a TIFF")),
     };
 
-    let mut exif = Exif { date: None, orientation: 1, preview: heif_jpeg };
+    let mut exif = Exif { date: None, orientation: 1, preview: None, hevc: Vec::new() };
+    let mut irot = 0;
+    if let Some(h) = heif {
+        (exif.preview, exif.hevc, irot) = (h.jpeg, h.hevc, h.irot);
+    }
     let mut exif_ifd = 0;
     let mut next = e.u32(&header[4..]);
     // IFD0 holds the ARW preview and orientation, IFD1 holds the small JPG thumbnail.
@@ -72,6 +92,10 @@ pub fn read_from<R: Read + Seek>(r: &mut R) -> io::Result<Exif> {
             exif.date = parse_date(s);
         }
     }
+    // irot turns the image anticlockwise in 90° steps; HEIF readers take it over EXIF Orientation.
+    if irot != 0 {
+        exif.orientation = [1, 8, 3, 6][irot as usize];
+    }
     Ok(exif)
 }
 
@@ -98,17 +122,24 @@ fn jpeg_tiff_start<R: Read + Seek>(r: &mut R) -> io::Result<u64> {
     }
 }
 
-/// HEIF (ISO BMFF): returns where the Exif item's TIFF starts and the largest JPEG item, if any.
-/// shortcut: a HIF with only HEVC images gets no preview (WebView can't decode HEVC);
-/// if Sony HIF turns out to have no JPEG item, decode through Windows WIC.
-fn heif<R: Read + Seek>(r: &mut R) -> io::Result<(u64, Option<(u64, u64)>)> {
+/// What a HEIF's meta box tells: where the Exif TIFF starts, the largest JPEG item, HEVC thumbnails, irot angle.
+struct Heif {
+    exif: u64,
+    jpeg: Option<(u64, u64)>,
+    hevc: Vec<Hevc>,
+    irot: u8,
+}
+
+/// HEIF (ISO BMFF). The main image (a grid of HEVC tiles) is never read: previews come from the thumbnails.
+fn heif<R: Read + Seek>(r: &mut R) -> io::Result<Heif> {
     let meta = top_box(r, b"meta")?;
-    let (exif, jpeg) = heif_items(&meta).ok_or_else(|| bad("no EXIF in HEIF"))?;
+    let mut heif = heif_items(&meta).ok_or_else(|| bad("no EXIF in HEIF"))?;
     // The Exif item starts with a 4-byte offset to the TIFF header (past "Exif\0\0").
-    r.seek(SeekFrom::Start(exif))?;
+    r.seek(SeekFrom::Start(heif.exif))?;
     let mut skip = [0u8; 4];
     r.read_exact(&mut skip)?;
-    Ok((exif + 4 + u32::from_be_bytes(skip) as u64, jpeg))
+    heif.exif += 4 + u32::from_be_bytes(skip) as u64;
+    Ok(heif)
 }
 
 /// Contents of the first top-level box of this type.
@@ -133,11 +164,14 @@ fn top_box<R: Read + Seek>(r: &mut R, kind: &[u8; 4]) -> io::Result<Vec<u8>> {
     }
 }
 
-/// From the meta box: iinf gives item types, iloc gives where items lie in the file.
-/// Returns the Exif item's offset and (offset, length) of the largest JPEG item.
-fn heif_items(meta: &[u8]) -> Option<(u64, Option<(u64, u64)>)> {
+/// From the meta box: iinf gives item types, iloc where items lie in the file, iref which items are thumbnails,
+/// iprp the items' properties (ipco lists them, ipma ties them to items).
+fn heif_items(meta: &[u8]) -> Option<Heif> {
     let mut types = Vec::new(); // (item id, type)
     let mut places = Vec::new(); // (item id, file offset, length)
+    let mut thumbs = Vec::new(); // item ids
+    let mut props = Vec::new(); // (type, contents); ipma counts them from 1
+    let mut assoc = Vec::new(); // (item id, property numbers)
     for (kind, body) in boxes(meta.get(4..)?) {
         let mut c = Cur(body);
         match kind {
@@ -179,6 +213,32 @@ fn heif_items(meta: &[u8]) -> Option<(u64, Option<(u64, u64)>)> {
                     }
                 }
             }
+            b"iref" => {
+                let id_size = if c.uint(1)? == 0 { 2 } else { 4 };
+                c.take(3)?;
+                // each reference: from item id, count, to item ids; a 'thmb' from item is a thumbnail
+                thumbs.extend(boxes(c.0).filter(|(kind, _)| *kind == b"thmb").filter_map(|(_, r)| Cur(r).uint(id_size)));
+            }
+            b"iprp" => {
+                for (kind, body) in boxes(body) {
+                    let mut c = Cur(body);
+                    match kind {
+                        b"ipco" => props.extend(boxes(body)),
+                        b"ipma" => {
+                            let (version, flags) = (c.uint(1)?, c.uint(3)?);
+                            let id_size = if version == 0 { 2 } else { 4 };
+                            // property numbers: 1 or 2 bytes, the top bit marks an essential property
+                            let (prop_size, mask) = if flags & 1 == 1 { (2, 0x7FFF) } else { (1, 0x7F) };
+                            for _ in 0..c.uint(4)? {
+                                let id = c.uint(id_size)?;
+                                let numbers: Option<Vec<u64>> = (0..c.uint(1)?).map(|_| Some(c.uint(prop_size)? & mask)).collect();
+                                assoc.push((id, numbers?));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -186,8 +246,23 @@ fn heif_items(meta: &[u8]) -> Option<(u64, Option<(u64, u64)>)> {
         let ids = types.iter().filter(|(_, t)| *t == kind);
         ids.filter_map(|(id, _)| places.iter().find(|p| p.0 == *id)).map(|&(_, o, l)| (o, l)).collect()
     };
-    let exif = place(b"Exif").first()?.0;
-    Some((exif, place(b"jpeg").into_iter().max_by_key(|p| p.1)))
+    let prop = |id: u64, kind: &[u8]| -> Option<&[u8]> {
+        let numbers = &assoc.iter().find(|(i, _)| *i == id)?.1;
+        numbers.iter().filter_map(|&n| props.get(n.checked_sub(1)? as usize)).find(|(k, _)| *k == kind).map(|(_, b)| *b)
+    };
+    let mut hevc: Vec<Hevc> = thumbs
+        .iter()
+        .filter(|&&id| types.contains(&(id, &b"hvc1"[..])))
+        .filter_map(|&id| {
+            let &(_, offset, len) = places.iter().find(|p| p.0 == id)?;
+            let mut size = Cur(prop(id, b"ispe")?.get(4..)?); // after version and flags
+            let (width, height) = (size.uint(4)? as u32, size.uint(4)? as u32);
+            Some(Hevc { offset, len, config: prop(id, b"hvcC")?.to_vec(), width, height })
+        })
+        .collect();
+    hevc.sort_by_key(|h| std::cmp::Reverse(h.width));
+    let irot = thumbs.iter().find_map(|&id| prop(id, b"irot")?.first()).map_or(0, |angle| angle & 3);
+    Some(Heif { exif: place(b"Exif").first()?.0, jpeg: place(b"jpeg").into_iter().max_by_key(|p| p.1), hevc, irot })
 }
 
 /// ISO BMFF boxes in a byte slice: (type, contents).
@@ -314,24 +389,32 @@ pub mod sample {
         [&(body.len() as u32 + 8).to_be_bytes()[..], kind, body].concat()
     }
 
-    /// ftyp + meta (iinf: item 1 = Exif, 2 = jpeg; iloc v0, 4-byte offsets) + mdat (Exif item, then a 1000-byte "JPEG").
-    pub fn heif(date: &str) -> Vec<u8> {
+    /// ftyp + meta + mdat (Exif item, a 1000-byte "JPEG", a 500-byte "HEVC" thumbnail 320×212 turned by `irot`).
+    /// meta: iinf (1 = Exif, 2 = jpeg, 3 = hvc1), iref (3 is a thumbnail), iprp (hvcC, ispe, irot of 3), iloc v0.
+    pub fn heif(date: &str, irot: u8) -> Vec<u8> {
         let exif = [&[0, 0, 0, 6][..], b"Exif\0\0", &tiff(date)].concat();
-        let jpeg = vec![0xFF; 1000];
+        let (jpeg, hevc) = (vec![0xFF; 1000], vec![0xEE; 500]);
         let infe = |id: u8, kind: &[u8]| bmff(b"infe", &[&[2, 0, 0, 0, 0, id, 0, 0][..], kind, b"\0"].concat());
-        let iinf = bmff(b"iinf", &[&[0, 0, 0, 0, 0, 2][..], &infe(1, b"Exif"), &infe(2, b"jpeg")].concat());
+        let iinf = [&[0, 0, 0, 0, 0, 3][..], &infe(1, b"Exif"), &infe(2, b"jpeg"), &infe(3, b"hvc1")].concat();
+        let iinf = bmff(b"iinf", &iinf);
+        let iref = bmff(b"iref", &[&[0, 0, 0, 0][..], &bmff(b"thmb", &[0, 3, 0, 1, 0, 9])].concat());
+        let ispe = [0, 0, 0, 0, 0, 0, 1, 64, 0, 0, 0, 212]; // 320×212
+        let ipco = bmff(b"ipco", &[bmff(b"hvcC", &[1, 2, 3]), bmff(b"ispe", &ispe), bmff(b"irot", &[irot])].concat());
+        let ipma = bmff(b"ipma", &[0, 0, 0, 0, 0, 0, 0, 1, 0, 3, 3, 0x81, 2, 3]); // item 3: properties 1 (essential), 2, 3
+        let iprp = bmff(b"iprp", &[ipco, ipma].concat());
         let ftyp = bmff(b"ftyp", b"heicmif1");
-        let iloc_len = 8 + 4 + 4 + 2 * 14; // header, version+flags, sizes+count, 2 items
-        let mdat = (ftyp.len() + 8 + 4 + iinf.len() + iloc_len + 8) as u32;
+        let iloc_len = 8 + 4 + 4 + 3 * 14; // header, version+flags, sizes+count, 3 items
+        let mdat = (ftyp.len() + 8 + 4 + iinf.len() + iref.len() + iprp.len() + iloc_len + 8) as u32;
         // item: id, data reference index, one extent: offset, length
-        let item = |id: u16, offset: u32, len: usize| {
+        let item = |id: u16, offset: usize, len: usize| {
+            let offset = mdat + offset as u32;
             [&id.to_be_bytes()[..], &[0, 0, 0, 1], &offset.to_be_bytes(), &(len as u32).to_be_bytes()].concat()
         };
-        let items = [item(1, mdat, exif.len()), item(2, mdat + exif.len() as u32, jpeg.len())].concat();
-        let iloc = bmff(b"iloc", &[&[0, 0, 0, 0, 0x44, 0x00, 0, 2][..], &items].concat());
+        let items = [item(1, 0, exif.len()), item(2, exif.len(), jpeg.len()), item(3, exif.len() + jpeg.len(), hevc.len())];
+        let iloc = bmff(b"iloc", &[&[0, 0, 0, 0, 0x44, 0x00, 0, 3][..], &items.concat()].concat());
         assert_eq!(iloc.len(), iloc_len);
-        let meta = bmff(b"meta", &[&[0, 0, 0, 0][..], &iinf, &iloc].concat());
-        [ftyp, meta, bmff(b"mdat", &[exif, jpeg].concat())].concat()
+        let meta = bmff(b"meta", &[&[0, 0, 0, 0][..], &iinf, &iref, &iprp, &iloc].concat());
+        [ftyp, meta, bmff(b"mdat", &[exif, jpeg, hevc].concat())].concat()
     }
 }
 
@@ -346,6 +429,7 @@ mod tests {
             date: Some("2023-09-21 15:30:12".into()),
             orientation: 6,
             preview: Some((base + 200, 50)),
+            hevc: Vec::new(),
         };
         let date = "2023:09:21 15:30:12\0";
         assert_eq!(read_from(&mut Cursor::new(sample::tiff(date))).unwrap(), want(0));
@@ -354,11 +438,18 @@ mod tests {
 
     #[test]
     fn reads_heif() {
-        let file = sample::heif("2023:09:21 15:30:12\0");
+        let date = "2023:09:21 15:30:12\0";
+        let file = sample::heif(date, 1);
+        let end = file.len() as u64;
         let exif = read_from(&mut Cursor::new(&file)).unwrap();
-        assert_eq!((exif.date.as_deref(), exif.orientation), (Some("2023-09-21 15:30:12"), 6));
-        // the 1000-byte JPEG item at the end of the file beats the 50-byte EXIF preview
-        assert_eq!(exif.preview, Some((file.len() as u64 - 1000, 1000)));
+        // irot 1 (90° anticlockwise) beats EXIF Orientation 6
+        assert_eq!((exif.date.as_deref(), exif.orientation), (Some("2023-09-21 15:30:12"), 8));
+        // the 1000-byte JPEG item beats the 50-byte EXIF preview
+        assert_eq!(exif.preview, Some((end - 1500, 1000)));
+        let hevc = Hevc { offset: end - 500, len: 500, config: vec![1, 2, 3], width: 320, height: 212 };
+        assert_eq!(exif.hevc, [hevc]);
+        // irot 0 leaves EXIF Orientation alone
+        assert_eq!(read_from(&mut Cursor::new(sample::heif(date, 0))).unwrap().orientation, 6);
     }
 
     #[test]

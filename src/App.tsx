@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import CopyDialog from './CopyDialog';
+import Preview from './Preview';
 import Settings from './Settings';
 import Viewer from './Viewer';
 import { setLang, t, type Lang } from './i18n';
-import { bytes, thumbUrl, total, type FileEntry, type Item, type Library, type Scan } from './model';
+import { bytes, total, type FileEntry, type Item, type Library, type Scan } from './model';
 import './App.css';
 
 const dayTitle = (day: string) =>
@@ -240,11 +241,7 @@ export default function App() {
                             >
                                 <div className="thumb">
                                     {item.thumb ? (
-                                        <img
-                                            loading="lazy"
-                                            className={`r${item.rotate}`}
-                                            src={thumbUrl(item.thumb)}
-                                        />
+                                        <Preview thumb={item.thumb} className={`r${item.rotate}`} />
                                     ) : (
                                         <span className="muted">{t.noPreview}</span>
                                     )}

@@ -5,7 +5,7 @@ const ru = {
     gb: 'ГБ',
     mb: 'МБ',
     mbPerSecond: 'МБ/с',
-    files: (n: number) => `${n} файлов`,
+    files: (n: number) => `${n} ${({ one: 'файл', few: 'файла' } as Record<string, string>)[new Intl.PluralRules('ru').select(n)] ?? 'файлов'}`,
     of: 'из',
     // Main window
     refresh: 'Обновить',

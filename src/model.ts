@@ -4,7 +4,9 @@ import { t } from './i18n';
 // Shapes of what the Rust commands return.
 
 export type FileEntry = { path: string; size: number };
-export type Thumb = { path: string; offset: number; len: number };
+/** An HEVC image in a HIF: bytes at offset/len, hvcC decoder config, size to crop the coded picture to. */
+export type Hevc = { offset: number; len: number; config: number[]; width: number; height: number };
+export type Thumb = { path: string; offset: number; len: number; hevc: Hevc[] };
 export type Item = {
     name: string;
     video: boolean;
@@ -18,7 +20,7 @@ export type Scan = { cards: string[]; days: Day[] };
 /** Card files already in the library; day -> the existing library folder for it. */
 export type Library = { copied: string[]; existing: Record<string, string> };
 
-export const thumbUrl = (t: Thumb) => convertFileSrc(`${t.offset}-${t.len}-${t.path}`, 'thumb');
+export const thumbUrl = (t: Omit<Thumb, 'hevc'>) => convertFileSrc(`${t.offset}-${t.len}-${t.path}`, 'thumb');
 
 export const total =(files: FileEntry[]) => files.reduce((sum, f) => sum + f.size, 0);
 

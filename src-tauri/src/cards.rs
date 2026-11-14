@@ -20,6 +20,8 @@ pub struct Thumb {
     pub path: PathBuf,
     pub offset: u64,
     pub len: u64,
+    /// A HIF's HEVC thumbnails, sharper than its 160×120 JPEG, which stays for when they can't be decoded.
+    pub hevc: Vec<exif::Hevc>,
 }
 
 impl Thumb {
@@ -144,7 +146,10 @@ fn photos(card: &Path) -> Vec<Item> {
             }
             let exif = exif::read(&path).ok();
             let time = exif.as_ref().and_then(|e| e.date.clone()).unwrap_or_else(|| file_time(&meta));
-            let thumb = exif.as_ref().and_then(|e| e.preview).map(|(offset, len)| Thumb { path: path.clone(), offset, len });
+            let thumb = exif.as_ref().and_then(|e| {
+                let (offset, len) = e.preview?;
+                Some(Thumb { path: path.clone(), offset, len, hevc: e.hevc.clone() })
+            });
             let rotate = exif.map_or(1, |e| e.orientation);
             let files = vec![FileEntry { path, size: meta.len() }];
             out.push(Item { name, video: false, time, files, thumb, rotate });
@@ -172,7 +177,7 @@ fn videos(card: &Path) -> Vec<Item> {
                 (item, None)
             });
             if dir == "THMBNL" {
-                item.thumb = Some(Thumb { path, offset: 0, len: meta.len() });
+                item.thumb = Some(Thumb { path, offset: 0, len: meta.len(), hevc: Vec::new() });
                 continue;
             }
             if ext == "XML" {
@@ -262,7 +267,7 @@ mod tests {
         // Card B, SD: JPG for DSC00001, a duplicate of DSC00002, a proxy dated by its file time.
         put(b.join(r"DCIM\100MSDCF\DSC00001.JPG"), &sample::jpeg(date));
         put(b.join(r"DCIM\100MSDCF\DSC00002.JPG"), &sample::jpeg(date));
-        put(b.join(r"DCIM\100MSDCF\DSC00001.HIF"), &sample::heif(date));
+        put(b.join(r"DCIM\100MSDCF\DSC00001.HIF"), &sample::heif(date, 0));
         let proxy = put(b.join(r"PRIVATE\M4ROOT\SUB\C0001S03.MP4"), b"proxy");
         let noon = Local.with_ymd_and_hms(2023, 9, 22, 12, 0, 0).unwrap();
         File::options().write(true).open(proxy).unwrap().set_modified(noon.into()).unwrap();

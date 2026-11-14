@@ -71,8 +71,8 @@ fn open_external(path: PathBuf) -> Result<(), String> {
     std::process::Command::new("explorer").arg(&path).spawn().map(drop).map_err(|e| e.to_string())
 }
 
-/// `thumb://localhost/{offset}-{len}-{url-encoded path}` -> that JPEG. The whole location is in the URL,
-/// so there is no state to go stale between scans. Only photo files (ARW/JPG/HIF) are served.
+/// `thumb://localhost/{offset}-{len}-{url-encoded path}` -> those bytes: a JPEG, or a HIF's HEVC image.
+/// The whole location is in the URL, so there is no state to go stale between scans. Only photo files (ARW/JPG/HIF) are served.
 fn thumb(path: &str) -> Option<Vec<u8>> {
     let decoded = percent_encoding::percent_decode_str(path.trim_start_matches('/')).decode_utf8().ok()?;
     let mut parts = decoded.splitn(3, '-');
@@ -82,7 +82,7 @@ fn thumb(path: &str) -> Option<Vec<u8>> {
     if !cards::PHOTO_EXTS.contains(&ext.as_str()) {
         return None;
     }
-    cards::Thumb { path, offset, len }.read().ok()
+    cards::Thumb { path, offset, len, hevc: Vec::new() }.read().ok()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -93,7 +93,11 @@ pub fn run() {
             let path = request.uri().path().to_string();
             tauri::async_runtime::spawn_blocking(move || {
                 let response = match thumb(&path) {
-                    Some(jpeg) => Response::builder().header(header::CONTENT_TYPE, "image/jpeg").body(jpeg),
+                    Some(jpeg) => Response::builder()
+                        .header(header::CONTENT_TYPE, "image/jpeg")
+                        // thumb.localhost is another origin: the UI fetch()es HEVC bytes from here
+                        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+                        .body(jpeg),
                     None => Response::builder().status(StatusCode::NOT_FOUND).body(Vec::new()),
                 };
                 responder.respond(response.unwrap());
