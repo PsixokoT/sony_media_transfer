@@ -6,7 +6,7 @@ import Settings from './Settings';
 import Viewer from './Viewer';
 import { setLang, t, type Lang } from './i18n';
 import { Icon } from './icons';
-import { bytes, openFolder, total, type FileEntry, type Item, type Library, type Scan } from './model';
+import { bytes, isProxy, openFolder, total, type FileEntry, type Item, type Library, type Scan } from './model';
 import './App.css';
 
 const dayTitle = (day: string) =>
@@ -17,8 +17,14 @@ const dayTitle = (day: string) =>
         year: 'numeric',
     });
 
-const exts = (item: Item) =>
-    [...new Set(item.files.map((f) => f.path.split('.').pop()!.toUpperCase()))].join(' ');
+/** "ARW JPG", "MP4 XML прокси". */
+function exts(item: Item) {
+    const list = new Set(item.files.map((f) => f.path.split('.').pop()!.toUpperCase()));
+    if (item.files.some((f) => isProxy(f.path))) list.add(t.proxy);
+    return [...list].join(' ');
+}
+
+const isRaw = (f: FileEntry) => /\.ARW$/i.test(f.path);
 
 const key = (item: Item) => item.name + item.time;
 
@@ -27,6 +33,7 @@ export default function App() {
     const [error, setError] = useState<string>();
     const [busy, setBusy] = useState(false);
     const [root, setRoot] = useState(() => localStorage.getItem('root') ?? '');
+    const [withRaw, setWithRaw] = useState(() => localStorage.getItem('jpgWithRaw') === 'true');
     const [lib, setLib] = useState<Library>();
     const [libVersion, setLibVersion] = useState(0); // bumped to look at the library again after copying
     // Tiles whose checkbox differs from the default: checked unless already copied.
@@ -102,7 +109,9 @@ export default function App() {
     }, [scan, root, libVersion]);
 
     const copied = useMemo(() => new Set(lib?.copied), [lib]);
-    const isCopied = (item: Item) => item.files.every((f) => copied.has(f.path));
+    // What a tile needs in the library. Unless Settings say otherwise, a frame with an ARW needs only the ARW.
+    const needed = (item: Item) => (withRaw || !item.files.some(isRaw) ? item.files : item.files.filter(isRaw));
+    const isCopied = (item: Item) => needed(item).every((f) => copied.has(f.path));
     const isChecked = (item: Item) => !isCopied(item) !== toggled.has(key(item));
 
     function check(items: Item[], value: boolean) {
@@ -116,8 +125,9 @@ export default function App() {
 
     // A tile copied in part sends only the rest; one copied in full and checked by hand goes again.
     const toCopy = (item: Item) => {
-        const rest = item.files.filter((f) => !copied.has(f.path));
-        return rest.length ? rest : item.files;
+        const files = needed(item);
+        const rest = files.filter((f) => !copied.has(f.path));
+        return rest.length ? rest : files;
     };
     const chosen = (scan?.days ?? [])
         .map((d): [string, FileEntry[]] => [d.day, d.items.filter(isChecked).flatMap(toCopy)])
@@ -308,6 +318,12 @@ export default function App() {
                 <Settings
                     root={root}
                     onRoot={changeRoot}
+                    withRaw={withRaw}
+                    onWithRaw={(v) => {
+                        localStorage.setItem('jpgWithRaw', String(v));
+                        setWithRaw(v);
+                        setToggled(new Set()); // hand-set checkboxes would flip where "copied" changes
+                    }}
                     onLang={(l) => {
                         setLang(l);
                         setLangState(l);

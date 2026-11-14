@@ -2,10 +2,8 @@ import { useRef, useState } from 'react';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { t } from './i18n';
 import { Icon } from './icons';
-import { thumbUrl, type Item } from './model';
+import { isProxy, thumbUrl, type Item } from './model';
 import Preview from './Preview';
-
-const isProxy = (path: string) => /S03\.MP4$/i.test(path);
 
 /**
  * A whole JPG beats the 1616×1080 preview inside the ARW (or the HEVC preview inside the HIF). The browser turns

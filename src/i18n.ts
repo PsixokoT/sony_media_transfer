@@ -36,6 +36,7 @@ const ru = {
     library: 'Папка библиотеки',
     libraryExample: 'например e:\\FOTO\\Sony A7IV\\PHOTOS',
     choose: 'Выбрать…',
+    jpgWithRaw: 'Копировать JPG/HIF вместе с RAW',
     language: 'Язык',
 };
 
@@ -71,6 +72,7 @@ const en: typeof ru = {
     library: 'Library folder',
     libraryExample: 'e.g. e:\\FOTO\\Sony A7IV\\PHOTOS',
     choose: 'Choose…',
+    jpgWithRaw: 'Copy JPG/HIF along with RAW',
     language: 'Language',
 };
 

@@ -102,7 +102,8 @@ pub fn scan(roots: &[PathBuf]) -> Scan {
 
     let mut days: Vec<Day> = Vec::new();
     let mut items: Vec<Item> = items.into_values().collect();
-    items.sort_by(|a, b| (&a.time, &a.name).cmp(&(&b.time, &b.name)));
+    // Newest first: the last shot is top left.
+    items.sort_by(|a, b| (&b.time, &b.name).cmp(&(&a.time, &a.name)));
     for item in items {
         match days.last_mut() {
             Some(d) if d.day == item.time[..10] => d.items.push(item),
@@ -286,13 +287,13 @@ mod tests {
         assert_eq!(
             summary,
             [
-                ("2023-09-21", "DSC00001", 3, true), // ARW + JPG + HIF from two cards
-                ("2023-09-21", "DSC00002", 1, true), // duplicate kept once
                 ("2023-09-22", "C0001", 3, true),    // MP4 + XML + proxy from the other card
+                ("2023-09-21", "DSC00002", 1, true), // duplicate kept once
+                ("2023-09-21", "DSC00001", 3, true), // ARW + JPG + HIF from two cards
             ]
         );
-        let first = &scan.days[0].items[0];
-        assert_eq!((first.time.as_str(), first.rotate), ("2023-09-21 15:30:12", 6));
-        assert_eq!(scan.days[1].items[0].time, "2023-09-22 10:00:00");
+        let frame = &scan.days[1].items[1];
+        assert_eq!((frame.time.as_str(), frame.rotate), ("2023-09-21 15:30:12", 6));
+        assert_eq!(scan.days[0].items[0].time, "2023-09-22 10:00:00");
     }
 }

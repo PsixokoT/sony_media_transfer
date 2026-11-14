@@ -31,6 +31,8 @@ export function FolderField(props: { value: string; onChange: (path: string) => 
 export default function Settings(props: {
     root: string;
     onRoot: (root: string) => void;
+    withRaw: boolean;
+    onWithRaw: (value: boolean) => void;
     onLang: (lang: Lang) => void;
     onClose: () => void;
 }) {
@@ -38,6 +40,12 @@ export default function Settings(props: {
         <Dialog title={t.settings} onClose={props.onClose}>
             <p>{t.library}</p>
             <FolderField value={props.root} onChange={props.onRoot} />
+            <p>
+                <label>
+                    <input type="checkbox" checked={props.withRaw} onChange={(e) => props.onWithRaw(e.target.checked)} />{' '}
+                    {t.jpgWithRaw}
+                </label>
+            </p>
             <p>
                 <label>
                     {t.language}{' '}
