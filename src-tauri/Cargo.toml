@@ -1,6 +1,6 @@
 [package]
 name = "sony-transfer"
-version = "0.1.0"
+version = "1.0.0"
 description = "Copies photos and videos from a Sony A7 IV"
 authors = ["PsixokoT"]
 edition = "2024"
