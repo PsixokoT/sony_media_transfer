@@ -22,6 +22,10 @@ const ru = {
     ejected: 'Камера извлечена, её можно отключать.',
     noPreview: 'нет превью',
     copied: 'скопировано',
+    hide: 'Скрыть',
+    unhide: 'Вернуть',
+    hiddenMark: 'скрыто',
+    showHidden: (n: number) => `Показывать скрытые (${n})`,
     // Copy dialog
     copying: 'Копирование',
     oneFolder: 'Одна папка на диапазон',
@@ -37,6 +41,7 @@ const ru = {
     libraryExample: 'например e:\\FOTO\\Sony A7IV\\PHOTOS',
     choose: 'Выбрать…',
     jpgWithRaw: 'Копировать JPG/HIF вместе с RAW',
+    unhideAll: (n: number) => `Вернуть все скрытые (${n})`,
     language: 'Язык',
 };
 
@@ -61,6 +66,10 @@ const en: typeof ru = {
     ejected: 'The camera has been ejected and can be unplugged.',
     noPreview: 'no preview',
     copied: 'copied',
+    hide: 'Hide',
+    unhide: 'Unhide',
+    hiddenMark: 'hidden',
+    showHidden: (n) => `Show hidden (${n})`,
     copying: 'Copying',
     oneFolder: 'One folder for the range',
     folderPerDay: 'A folder per day',
@@ -73,6 +82,7 @@ const en: typeof ru = {
     libraryExample: 'e.g. e:\\FOTO\\Sony A7IV\\PHOTOS',
     choose: 'Choose…',
     jpgWithRaw: 'Copy JPG/HIF along with RAW',
+    unhideAll: (n) => `Unhide all hidden (${n})`,
     language: 'Language',
 };
 

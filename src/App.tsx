@@ -28,6 +28,15 @@ const isRaw = (f: FileEntry) => /\.ARW$/i.test(f.path);
 
 const key = (item: Item) => item.name + item.time;
 
+/** Local date `daysAgo` days back, YYYY-MM-DD: compares as a string. */
+const date = (daysAgo = 0) => new Date(Date.now() - daysAgo * 864e5).toLocaleDateString('sv-SE');
+
+/** Hidden tiles: key -> the day last seen on a card. Not seen for 30 days (the card was formatted): forgotten. */
+function loadHidden(): Record<string, string> {
+    const saved: Record<string, string> = JSON.parse(localStorage.getItem('hidden') ?? '{}');
+    return Object.fromEntries(Object.entries(saved).filter(([, seen]) => seen >= date(30)));
+}
+
 export default function App() {
     const [scan, setScan] = useState<Scan>();
     const [error, setError] = useState<string>();
@@ -38,6 +47,8 @@ export default function App() {
     const [libVersion, setLibVersion] = useState(0); // bumped to look at the library again after copying
     // Tiles whose checkbox differs from the default: checked unless already copied.
     const [toggled, setToggled] = useState(new Set<string>());
+    const [hidden, setHidden] = useState(loadHidden);
+    const [showHidden, setShowHidden] = useState(false);
     const [dialog, setDialog] = useState(false);
     // Tile keys: the cursor, where a Shift range starts, and the selection Space and checkboxes act on.
     const [current, setCurrent] = useState<string>();
@@ -53,6 +64,11 @@ export default function App() {
         try {
             const found = await invoke<Scan>('scan');
             setScan(found);
+            setHidden((h) => {
+                const next = { ...h };
+                for (const day of found.days) for (const item of day.items) if (key(item) in next) next[key(item)] = date();
+                return next;
+            });
             if (found.cards.length) setEjected(false);
             setToggled(new Set());
             setError(undefined);
@@ -66,6 +82,8 @@ export default function App() {
     useEffect(() => {
         refresh();
     }, []);
+
+    useEffect(() => localStorage.setItem('hidden', JSON.stringify(hidden)), [hidden]);
 
     // Hot plug: the drive list is polled, and the cards are read again only when it changes.
     useEffect(() => {
@@ -113,10 +131,13 @@ export default function App() {
     const needed = (item: Item) => (withRaw || !item.files.some(isRaw) ? item.files : item.files.filter(isRaw));
     const isCopied = (item: Item) => needed(item).every((f) => copied.has(f.path));
     const isChecked = (item: Item) => !isCopied(item) !== toggled.has(key(item));
+    // Hidden tiles are rejects: never copied, counted, checked or viewed.
+    const isHidden = (item: Item) => key(item) in hidden;
+    const live = (items: Item[]) => items.filter((i) => !isHidden(i));
 
     function check(items: Item[], value: boolean) {
         const next = new Set(toggled);
-        for (const item of items) {
+        for (const item of live(items)) {
             if (value === !isCopied(item)) next.delete(key(item));
             else next.add(key(item));
         }
@@ -130,22 +151,29 @@ export default function App() {
         return rest.length ? rest : files;
     };
     const chosen = (scan?.days ?? [])
-        .map((d): [string, FileEntry[]] => [d.day, d.items.filter(isChecked).flatMap(toCopy)])
+        .map((d): [string, FileEntry[]] => [d.day, live(d.items).filter(isChecked).flatMap(toCopy)])
         .filter(([, files]) => files.length);
     const chosenFiles = chosen.flatMap(([, files]) => files);
 
     const flat = useMemo(() => scan?.days.flatMap((d) => d.items) ?? [], [scan]);
-    const index = useMemo(() => new Map(flat.map((item, i) => [key(item), i])), [flat]);
+    const hiddenHere = flat.filter(isHidden).length;
+    if (showHidden && !hiddenHere) setShowHidden(false); // the checkbox is gone; the next hidden tile isn't shown
+    // What the cursor walks and Ctrl+A selects: the grid, or in the viewer only the tiles not hidden.
+    const list = useMemo(
+        () => (showHidden && !viewing ? flat : flat.filter((i) => !(key(i) in hidden))),
+        [flat, hidden, showHidden, viewing]
+    );
+    const index = useMemo(() => new Map(list.map((item, i) => [key(item), i])), [list]);
     const pos = index.get(current ?? '') ?? -1;
 
     /** Cursor to tile i, the way Explorer and Lightroom do it: alone it selects only that tile,
      *  Shift selects from the anchor to it, Ctrl adds it to the selection or takes it out. */
     function select(i: number, mods: { shiftKey: boolean; ctrlKey: boolean }) {
-        const k = key(flat[i]);
+        const k = key(list[i]);
         setCurrent(k);
         if (mods.shiftKey) {
             const a = index.get(anchor ?? '') ?? i;
-            setSelected(new Set(flat.slice(Math.min(a, i), Math.max(a, i) + 1).map(key)));
+            setSelected(new Set(list.slice(Math.min(a, i), Math.max(a, i) + 1).map(key)));
             return;
         }
         setAnchor(k);
@@ -155,10 +183,30 @@ export default function App() {
     }
 
     // The selection, or the cursor tile when nothing is selected.
-    const targets = () => (selected.size ? flat.filter((i) => selected.has(key(i))) : flat.slice(pos, pos + 1));
+    const targets = () => (selected.size ? list.filter((i) => selected.has(key(i))) : list.slice(pos, pos + 1));
+
+    /** Hides the tiles, or unhides them if all are hidden already, like Space does with checkboxes. */
+    function hide(items: Item[]) {
+        const back = items.every(isHidden);
+        const next = { ...hidden };
+        for (const item of items) {
+            if (back) delete next[key(item)];
+            else next[key(item)] = date();
+        }
+        setHidden(next);
+        setSelected(new Set());
+        if (back || !current || !(current in next)) return;
+        // The cursor goes on to the next (older) tile still shown, else the one before; with neither the viewer closes.
+        const i = flat.findIndex((item) => key(item) === current);
+        const shown = (item: Item) => !(key(item) in next);
+        const to = flat.slice(i + 1).find(shown) ?? flat.slice(0, i).reverse().find(shown);
+        setCurrent(to && key(to));
+        setAnchor(to && key(to));
+        if (!to) setViewing(false);
+    }
 
     // ← → move the cursor (in the grid and in the viewer), Shift+← → extend the selection, Ctrl+A selects all,
-    // Space checks or unchecks the selection, Enter opens, Esc closes.
+    // Space checks or unchecks the selection, Delete hides or unhides it, Enter opens, Esc closes.
     // No deps: it subscribes again on every render, so it always sees the current state.
     useEffect(() => {
         function onKey(e: KeyboardEvent) {
@@ -166,13 +214,14 @@ export default function App() {
             if (dialog || settings || target.matches('input:not([type=checkbox])')) return; // typing, or a dialog
             if (target.matches('button') && (e.key === 'Enter' || e.key === ' ')) return; // pressing a button
             const move = (by: number) =>
-                flat.length && select(Math.min(Math.max(pos + by, 0), flat.length - 1), { shiftKey: e.shiftKey, ctrlKey: false });
+                list.length && select(Math.min(Math.max(pos + by, 0), list.length - 1), { shiftKey: e.shiftKey, ctrlKey: false });
             const t = targets();
             if (e.key === 'ArrowLeft') move(-1);
             else if (e.key === 'ArrowRight') move(1);
             else if (e.code === 'KeyA' && e.ctrlKey) setSelected(new Set(index.keys())); // code: also on a Russian layout
-            else if (e.key === ' ' && t.length) check(t, !t.every(isChecked)); // mixed: check them all
-            else if (e.key === 'Enter' && flat[pos]) setViewing(true);
+            else if (e.key === ' ' && t.length) check(t, !live(t).every(isChecked)); // mixed: check them all
+            else if (e.key === 'Delete' && t.length) hide(t);
+            else if (e.key === 'Enter' && list[pos] && !isHidden(list[pos])) setViewing(true);
             else if (e.key === 'Escape') setViewing(false);
             else return;
             e.preventDefault(); // no page scroll on Space, no native checkbox toggle or video seek on top of ours
@@ -196,6 +245,8 @@ export default function App() {
         }
     }
 
+    const targeted = targets();
+    const unhiding = targeted.length > 0 && targeted.every(isHidden);
     return (
         <main>
             <header>
@@ -211,6 +262,16 @@ export default function App() {
                     <Icon name="copy" />
                     {t.copy} {chosenFiles.length ? `${chosenFiles.length} · ${bytes(total(chosenFiles))}` : ''}
                 </button>
+                <button disabled={!targeted.length} onClick={() => hide(targeted)} title="Delete">
+                    <Icon name={unhiding ? 'unhide' : 'hide'} />
+                    {unhiding ? t.unhide : t.hide}
+                </button>
+                {hiddenHere > 0 && (
+                    <label>
+                        <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} />
+                        {t.showHidden(hiddenHere)}
+                    </label>
+                )}
                 <span className="muted">
                     {scan && root && !lib && !error && `${t.checkingLibrary} `}
                     {scan?.cards.length ? `${t.cards}: ${scan.cards.join(', ')}` : ''}
@@ -240,72 +301,91 @@ export default function App() {
             {error && <p className="error">{error}</p>}
             {scan && !scan.cards.length && <p className="muted">{ejected ? t.ejected : t.noCard}</p>}
 
-            {scan?.days.map((day) => (
-                <section key={day.day}>
-                    <h2>
-                        <label>
-                            <input
-                                type="checkbox"
-                                checked={day.items.every(isChecked)}
-                                onChange={(e) => check(day.items, e.target.checked)}
-                            />
-                            {dayTitle(day.day)}
-                        </label>
-                        <span className="muted">
-                            {day.items.length} · {bytes(total(day.items.flatMap((i) => i.files)))}
-                        </span>
-                    </h2>
-                    <div className="grid">
-                        {day.items.map((item) => (
-                            <div
-                                key={key(item)}
-                                className={[
-                                    'tile',
-                                    isCopied(item) && 'copied',
-                                    key(item) === current && 'current',
-                                    selected.has(key(item)) && 'selected',
-                                ]
-                                    .filter(Boolean)
-                                    .join(' ')}
-                                onClick={(e) => select(index.get(key(item))!, e)}
-                                onDoubleClick={() => setViewing(true)}
-                            >
-                                <div className="thumb">
-                                    {item.thumb ? (
-                                        <Preview thumb={item.thumb} className={`r${item.rotate}`} />
-                                    ) : (
-                                        <span className="muted">{t.noPreview}</span>
-                                    )}
-                                    {item.video && <span className="badge">▶</span>}
-                                    <input
-                                        type="checkbox"
-                                        className="check"
-                                        checked={isChecked(item)}
-                                        // On a selected tile it checks the whole selection, like in Lightroom.
-                                        onChange={(e) => check(selected.has(key(item)) ? targets() : [item], e.target.checked)}
-                                        onClick={(e) => e.stopPropagation()} // checks, doesn't select
-                                    />
+            {scan?.days.map((day) => {
+                const items = showHidden ? day.items : live(day.items);
+                const counted = live(day.items);
+                return items.length > 0 && (
+                    <section key={day.day}>
+                        <h2>
+                            <label>
+                                <input
+                                    type="checkbox"
+                                    checked={counted.length > 0 && counted.every(isChecked)}
+                                    onChange={(e) => check(counted, e.target.checked)}
+                                />
+                                {dayTitle(day.day)}
+                            </label>
+                            <span className="muted">
+                                {counted.length} · {bytes(total(counted.flatMap((i) => i.files)))}
+                            </span>
+                        </h2>
+                        <div className="grid">
+                            {items.map((item) => (
+                                <div
+                                    key={key(item)}
+                                    className={[
+                                        'tile',
+                                        isCopied(item) && 'copied',
+                                        isHidden(item) && 'hidden',
+                                        key(item) === current && 'current',
+                                        selected.has(key(item)) && 'selected',
+                                    ]
+                                        .filter(Boolean)
+                                        .join(' ')}
+                                    onClick={(e) => select(index.get(key(item))!, e)}
+                                    onDoubleClick={() => !isHidden(item) && setViewing(true)}
+                                >
+                                    <div className="thumb">
+                                        {item.thumb ? (
+                                            <Preview thumb={item.thumb} className={`r${item.rotate}`} />
+                                        ) : (
+                                            <span className="muted">{t.noPreview}</span>
+                                        )}
+                                        {item.video && <span className="badge">▶</span>}
+                                        {isHidden(item) ? (
+                                            <button
+                                                className="icon-button unhide"
+                                                title={t.unhide}
+                                                onClick={(e) => {
+                                                    e.stopPropagation(); // unhides, doesn't select
+                                                    hide([item]);
+                                                }}
+                                            >
+                                                <Icon name="unhide" />
+                                            </button>
+                                        ) : (
+                                            <input
+                                                type="checkbox"
+                                                className="check"
+                                                checked={isChecked(item)}
+                                                // On a selected tile it checks the whole selection, like in Lightroom.
+                                                onChange={(e) => check(selected.has(key(item)) ? targets() : [item], e.target.checked)}
+                                                onClick={(e) => e.stopPropagation()} // checks, doesn't select
+                                            />
+                                        )}
+                                    </div>
+                                    <div className="caption">
+                                        {item.name} <span className="muted">{item.time.slice(11, 16)}</span>
+                                        <br />
+                                        <span className="muted">
+                                            {exts(item)}
+                                            {isCopied(item) && ` · ${t.copied}`}
+                                            {isHidden(item) && ` · ${t.hiddenMark}`}
+                                        </span>
+                                    </div>
                                 </div>
-                                <div className="caption">
-                                    {item.name} <span className="muted">{item.time.slice(11, 16)}</span>
-                                    <br />
-                                    <span className="muted">
-                                        {exts(item)}
-                                        {isCopied(item) && ` · ${t.copied}`}
-                                    </span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </section>
-            ))}
+                            ))}
+                        </div>
+                    </section>
+                );
+            })}
 
-            {viewing && flat[pos] && (
+            {viewing && list[pos] && (
                 <Viewer
                     key={current}
-                    item={flat[pos]}
-                    checked={isChecked(flat[pos])}
-                    onCheck={(v) => check([flat[pos]], v)}
+                    item={list[pos]}
+                    checked={isChecked(list[pos])}
+                    onCheck={(v) => check([list[pos]], v)}
                     onClose={() => setViewing(false)}
                 />
             )}
@@ -324,6 +404,8 @@ export default function App() {
                         setWithRaw(v);
                         setToggled(new Set()); // hand-set checkboxes would flip where "copied" changes
                     }}
+                    hiddenCount={Object.keys(hidden).length}
+                    onUnhideAll={() => setHidden({})}
                     onLang={(l) => {
                         setLang(l);
                         setLangState(l);

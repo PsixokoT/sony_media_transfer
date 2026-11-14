@@ -64,7 +64,8 @@ select {
     font: inherit;
 }
 
-h2 label {
+h2 label,
+main > header label {
     display: flex;
     gap: 8px;
     align-items: center;
@@ -192,6 +193,18 @@ h2 {
 .tile.copied img {
     filter: grayscale(1);
     opacity: 0.4;
+}
+
+/* Hidden, shown on demand: faded, with an Unhide button where the checkbox was. */
+.tile.hidden .thumb > :not(.unhide),
+.tile.hidden .caption {
+    opacity: 0.4;
+}
+
+.unhide {
+    position: absolute;
+    top: 4px;
+    right: 4px;
 }
 
 .check {

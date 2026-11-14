@@ -8,6 +8,8 @@ const icons = {
     openFolder: '', // FolderOpen
     openExternal: '', // OpenInNewWindow
     close: '', // Cancel
+    hide: '', // Hide
+    unhide: '', // View
 };
 
 export const Icon = (props: { name: keyof typeof icons }) => (

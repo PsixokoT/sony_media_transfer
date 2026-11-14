@@ -33,6 +33,8 @@ export default function Settings(props: {
     onRoot: (root: string) => void;
     withRaw: boolean;
     onWithRaw: (value: boolean) => void;
+    hiddenCount: number;
+    onUnhideAll: () => void;
     onLang: (lang: Lang) => void;
     onClose: () => void;
 }) {
@@ -45,6 +47,12 @@ export default function Settings(props: {
                     <input type="checkbox" checked={props.withRaw} onChange={(e) => props.onWithRaw(e.target.checked)} />{' '}
                     {t.jpgWithRaw}
                 </label>
+            </p>
+            <p>
+                <button disabled={!props.hiddenCount} onClick={props.onUnhideAll}>
+                    <Icon name="unhide" />
+                    {t.unhideAll(props.hiddenCount)}
+                </button>
             </p>
             <p>
                 <label>
