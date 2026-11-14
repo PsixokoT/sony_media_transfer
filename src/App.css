@@ -10,7 +10,10 @@ body {
     margin: 0;
 }
 
+/* Full height: a click below the last day clears the selection too. */
 main {
+    box-sizing: border-box;
+    min-height: 100vh;
     padding: 0 16px 16px;
 }
 
@@ -169,6 +172,14 @@ h2 {
     user-select: none; /* Shift+click and double click select tiles, not caption text */
 }
 
+/* Drag selection; absolute with no positioned parent, so it's placed in page coordinates. */
+.band {
+    position: absolute;
+    border: 1px solid #4a9eff;
+    background: rgb(74 158 255 / 0.15);
+    pointer-events: none;
+}
+
 .tile {
     cursor: pointer;
     scroll-margin: 70px 0 10px; /* scrolled to by the keyboard: not under the sticky header */
@@ -274,6 +285,29 @@ body:has(.viewer) {
 .viewer .media.r8 {
     width: 100vh;
     height: 100vw;
+}
+
+/* Previous / next on the sides, over the picture. */
+.viewer .side {
+    position: absolute;
+    top: 50%;
+    translate: 0 -50%;
+    padding: 28px 10px;
+    border: 0;
+    border-radius: 4px;
+    background: rgb(0 0 0 / 0.4);
+}
+
+.viewer .side .icon {
+    font-size: 24px;
+}
+
+.viewer .prev {
+    left: 8px;
+}
+
+.viewer .next {
+    right: 8px;
 }
 
 .viewer .empty {

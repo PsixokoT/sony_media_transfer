@@ -17,7 +17,15 @@ function photo(item: Item) {
 }
 
 /** Full-screen view of one tile. Keys are handled by App; remount it (key) for each tile. */
-export default function Viewer(props: { item: Item; checked: boolean; onCheck: (v: boolean) => void; onClose: () => void }) {
+export default function Viewer(props: {
+    item: Item;
+    checked: boolean;
+    onCheck: (v: boolean) => void;
+    /** None at the first or last tile. */
+    onPrev?: () => void;
+    onNext?: () => void;
+    onClose: () => void;
+}) {
     const { item } = props;
     // Clip first, proxy next; when both fail (unknown codec or picture-less playback) the system player is offered.
     const videos = item.files.filter((f) => /\.MP4$/i.test(f.path)).sort((a, b) => +isProxy(a.path) - +isProxy(b.path));
@@ -63,6 +71,16 @@ export default function Viewer(props: { item: Item; checked: boolean; onCheck: (
                         <span className="muted">{t.noPreview}</span>
                     )}
                 </div>
+            )}
+            {props.onPrev && (
+                <button className="side prev" onClick={props.onPrev} title="←">
+                    <Icon name="prev" />
+                </button>
+            )}
+            {props.onNext && (
+                <button className="side next" onClick={props.onNext} title="→">
+                    <Icon name="next" />
+                </button>
             )}
             <div className="bar">
                 <label>

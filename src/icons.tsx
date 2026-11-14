@@ -10,6 +10,8 @@ const icons = {
     close: '', // Cancel
     hide: '', // Hide
     unhide: '', // View
+    prev: '', // ChevronLeft
+    next: '', // ChevronRight
 };
 
 export const Icon = (props: { name: keyof typeof icons }) => (

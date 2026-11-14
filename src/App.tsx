@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import CopyDialog from './CopyDialog';
 import Preview from './Preview';
@@ -55,6 +55,8 @@ export default function App() {
     const [anchor, setAnchor] = useState<string>();
     const [selected, setSelected] = useState(new Set<string>());
     const [viewing, setViewing] = useState(false);
+    const lastWheel = useRef(0); // when the wheel last turned the viewer's page
+    const [band, setBand] = useState<{ left: number; top: number; right: number; bottom: number }>(); // page coordinates
     const [settings, setSettings] = useState(false);
     const [ejected, setEjected] = useState(false);
     const [, setLangState] = useState<Lang>(); // only to re-render after setLang
@@ -205,19 +207,72 @@ export default function App() {
         if (!to) setViewing(false);
     }
 
+    const move = (by: number, shiftKey = false) =>
+        list.length && select(Math.min(Math.max(pos + by, 0), list.length - 1), { shiftKey, ctrlKey: false });
+
+    /** Dragging with the left button selects every tile the band touches; with Ctrl or Shift it adds them, as in Explorer.
+     *  A click on empty space clears the selection. Text (an error to copy), popups and the viewer are left alone. */
+    function startBand(e: React.MouseEvent) {
+        if (e.button !== 0 || (e.target as HTMLElement).closest('header, p, .viewer, .overlay, button, input, label')) return;
+        e.preventDefault(); // no text selection or image drag; this also keeps focus, so drop it the way a click does
+        (document.activeElement as HTMLElement | null)?.blur();
+        const base = e.ctrlKey || e.shiftKey ? selected : new Set<string>();
+        const x0 = e.pageX;
+        const y0 = e.pageY;
+        let mouse = { x: e.clientX, y: e.clientY };
+        let dragged = false;
+        // Page coordinates, so scrolling with the wheel mid-drag stretches the band.
+        function update() {
+            const x1 = mouse.x + scrollX;
+            const y1 = mouse.y + scrollY;
+            if (!dragged && Math.hypot(x1 - x0, y1 - y0) < 5) return; // still a click
+            dragged = true;
+            const r = { left: Math.min(x0, x1), top: Math.min(y0, y1), right: Math.max(x0, x1), bottom: Math.max(y0, y1) };
+            setBand(r);
+            const next = new Set(base);
+            for (const tile of document.querySelectorAll<HTMLElement>('.tile')) {
+                const b = tile.getBoundingClientRect();
+                const hit = b.left + scrollX < r.right && b.right + scrollX > r.left && b.top + scrollY < r.bottom && b.bottom + scrollY > r.top;
+                if (hit) next.add(tile.dataset.key!);
+            }
+            setSelected(next);
+        }
+        const onMove = (m: MouseEvent) => {
+            mouse = { x: m.clientX, y: m.clientY };
+            update();
+        };
+        function onUp() {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('scroll', update);
+            window.removeEventListener('mouseup', onUp);
+            setBand(undefined);
+            if (!dragged) {
+                if (!(e.target as HTMLElement).closest('.tile') && !e.ctrlKey && !e.shiftKey) setSelected(new Set());
+                return;
+            }
+            // The click that ends a drag would select the one tile under the mouse. Removed right after: no click
+            // comes when the button is let go outside the window.
+            const swallow = (c: MouseEvent) => c.stopPropagation();
+            window.addEventListener('click', swallow, { capture: true, once: true });
+            setTimeout(() => window.removeEventListener('click', swallow, { capture: true }));
+        }
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('scroll', update);
+        window.addEventListener('mouseup', onUp);
+    }
+
     // ← → move the cursor (in the grid and in the viewer), Shift+← → extend the selection, Ctrl+A selects all,
     // Space checks or unchecks the selection, Delete hides or unhides it, Enter opens, Esc closes.
+    // The mouse wheel pages through the viewer like ← →.
     // No deps: it subscribes again on every render, so it always sees the current state.
     useEffect(() => {
         function onKey(e: KeyboardEvent) {
             const target = e.target as HTMLElement;
             if (dialog || settings || target.matches('input:not([type=checkbox])')) return; // typing, or a dialog
             if (target.matches('button') && (e.key === 'Enter' || e.key === ' ')) return; // pressing a button
-            const move = (by: number) =>
-                list.length && select(Math.min(Math.max(pos + by, 0), list.length - 1), { shiftKey: e.shiftKey, ctrlKey: false });
             const t = targets();
-            if (e.key === 'ArrowLeft') move(-1);
-            else if (e.key === 'ArrowRight') move(1);
+            if (e.key === 'ArrowLeft') move(-1, e.shiftKey);
+            else if (e.key === 'ArrowRight') move(1, e.shiftKey);
             else if (e.code === 'KeyA' && e.ctrlKey) setSelected(new Set(index.keys())); // code: also on a Russian layout
             else if (e.key === ' ' && t.length) check(t, !live(t).every(isChecked)); // mixed: check them all
             else if (e.key === 'Delete' && t.length) hide(t);
@@ -226,8 +281,19 @@ export default function App() {
             else return;
             e.preventDefault(); // no page scroll on Space, no native checkbox toggle or video seek on top of ours
         }
+        function onWheel(e: WheelEvent) {
+            // A mouse sends one event per notch; a touchpad dozens per swipe, so one step per 150 ms.
+            // shortcut: a fast spin drops notches and a touchpad swipe still turns a few pages; detect gestures if that bothers.
+            if (!viewing || !e.deltaY || e.timeStamp - lastWheel.current < 150) return;
+            lastWheel.current = e.timeStamp;
+            move(Math.sign(e.deltaY));
+        }
         window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
+        window.addEventListener('wheel', onWheel);
+        return () => {
+            window.removeEventListener('keydown', onKey);
+            window.removeEventListener('wheel', onWheel);
+        };
     });
 
     useEffect(() => document.querySelector('.tile.current')?.scrollIntoView({ block: 'nearest' }), [current]);
@@ -248,7 +314,7 @@ export default function App() {
     const targeted = targets();
     const unhiding = targeted.length > 0 && targeted.every(isHidden);
     return (
-        <main>
+        <main onMouseDown={startBand}>
             <header>
                 <button onClick={refresh} disabled={busy}>
                     <Icon name="refresh" />
@@ -323,6 +389,7 @@ export default function App() {
                             {items.map((item) => (
                                 <div
                                     key={key(item)}
+                                    data-key={key(item)}
                                     className={[
                                         'tile',
                                         isCopied(item) && 'copied',
@@ -379,6 +446,12 @@ export default function App() {
                     </section>
                 );
             })}
+            {band && (
+                <div
+                    className="band"
+                    style={{ left: band.left, top: band.top, width: band.right - band.left, height: band.bottom - band.top }}
+                />
+            )}
 
             {viewing && list[pos] && (
                 <Viewer
@@ -386,6 +459,8 @@ export default function App() {
                     item={list[pos]}
                     checked={isChecked(list[pos])}
                     onCheck={(v) => check([list[pos]], v)}
+                    onPrev={pos > 0 ? () => move(-1) : undefined}
+                    onNext={pos < list.length - 1 ? () => move(1) : undefined}
                     onClose={() => setViewing(false)}
                 />
             )}
